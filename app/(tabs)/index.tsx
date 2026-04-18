@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Modal,
   Pressable,
@@ -16,9 +16,11 @@ import { TermDetailModal } from '@/components/term-detail-modal';
 import { AskQuestionModal } from '@/components/ask-question-modal';
 import { ReviewScreen } from '@/components/review-screen';
 import { SocraticQuiz } from '@/components/socratic-quiz';
+import { EssayAnalysisModal } from '@/components/essay-analysis-modal';
 import { isSocraticQuizApplicable, getSocraticQuestionById } from '@/lib/socratic-quiz-system';
 import type { SocraticResponse } from '@/lib/socratic-quiz-system';
 import { createDynamicSocraticQuestion, generateDynamicSocraticAnalysisPrompt } from '@/lib/dynamic-socratic-question';
+import { analyzeEssayAnswer, reanalyzeEssayAnswer, recordEssayAnalysis, type EssayAnalysis } from '@/lib/essay-analysis-handler';
 import type { WrongAnswer } from '@/lib/spaced-repetition';
 import { addWrongAnswer, getReviewDue } from '@/lib/spaced-repetition';
 import { defaultProgress, lessons, type ArticleLesson, type ProgressState } from '@/lib/finstudy-data';
@@ -57,6 +59,11 @@ export default function TodayScreen() {
   const [essayAnswer, setEssayAnswer] = useState<string>('');
   const [isAnalyzingEssay, setIsAnalyzingEssay] = useState(false);
   const [dynamicSocraticQuestion, setDynamicSocraticQuestion] = useState<any>(null);
+  const [showEssayAnalysis, setShowEssayAnalysis] = useState(false);
+  const [essayAnalysis, setEssayAnalysis] = useState<EssayAnalysis | null>(null);
+  const [essayFollowUpQuestion, setEssayFollowUpQuestion] = useState('');
+  const [essayRetryCount, setEssayRetryCount] = useState(0);
+  const [firstEssayAnswer, setFirstEssayAnswer] = useState('');
 
   useEffect(() => {
     void loadProgress();
@@ -101,591 +108,370 @@ export default function TodayScreen() {
         setSavedArticleIds(prev => new Set(prev).add(articleId));
       }
     } catch (err) {
-      console.error('기사 저장 토글 실패:', err);
+      console.error('기사 저장 실패:', err);
     }
   }
-
-  function handleTermPress(term: string) {
-    const economicTerm = searchTerm(term);
-    if (economicTerm) {
-      setSelectedTerm(economicTerm);
-      setShowTermModal(true);
-    }
-  }
-
-  async function handleAskQuestion(question: string): Promise<string> {
-    if (!apiKey) {
-      throw new Error('API 키가 설정되지 않았습니다.');
-    }
-    return askQuestionAboutArticle(
-      question,
-      selectedLesson.title,
-      selectedLesson.summary,
-      apiKey
-    );
-  }
-
-  const accuracy = useMemo(() => {
-    if (!progress.solvedAnswers) return 0;
-    return Math.round((progress.correctAnswers / progress.solvedAnswers) * 100);
-  }, [progress.correctAnswers, progress.solvedAnswers]);
-
-  const currentQuestion = selectedLesson.quiz[quizIndex];
-  const isQuizComplete = quizIndex >= selectedLesson.quiz.length - 1;
 
   async function loadProgress() {
     try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as ProgressState;
-        setProgress(parsed);
+      const saved = await AsyncStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        setProgress(JSON.parse(saved));
       }
-    } catch (error) {
-      console.error('Progress load error:', error);
-    } finally {
-      setIsLoaded(true);
+    } catch (err) {
+      console.error('Failed to load progress:', err);
+    }
+  }
+
+  async function saveProgress(newProgress: ProgressState) {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newProgress));
+      setProgress(newProgress);
+    } catch (err) {
+      console.error('Failed to save progress:', err);
     }
   }
 
   async function loadLessons() {
     try {
-      const customArticles = await AsyncStorage.getItem('custom-articles');
-      if (customArticles) {
-        const parsed = JSON.parse(customArticles) as ArticleLesson[];
-        setAllLessons([...lessons, ...parsed]);
+      const { getLessons } = await import('@/lib/finstudy-data');
+      const loaded = await getLessons();
+      if (loaded.length > 0) {
+        setAllLessons(loaded);
+        setSelectedLesson(loaded[0]);
       }
-    } catch (error) {
-      console.error('Lessons load error:', error);
+    } catch (err) {
+      console.error('Failed to load lessons:', err);
     }
   }
 
-  async function handleRefresh() {
-    setIsRefreshing(true);
-    try {
-      await loadLessons();
-    } finally {
-      setIsRefreshing(false);
-    }
-  }
+  const currentQuestion = selectedLesson.quiz[quizIndex];
+  const isQuizComplete = quizIndex === selectedLesson.quiz.length - 1;
 
-  async function persistProgress(next: ProgressState) {
-    setProgress(next);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }
-
-  function openLesson(lesson: ArticleLesson) {
-    haptic.light();
-    setSelectedLesson(lesson);
-    setQuizIndex(0);
-    setSelectedAnswer(null);
-    setMode('detail');
-  }
-
-  function startQuiz() {
-    haptic.medium();
-    setQuizIndex(0);
-    setSelectedAnswer(null);
-    setEssayAnswer('');
-    setMode('quiz');
-  }
-
-  async function handleAnswer(index: number) {
+  function handleAnswer(index: number) {
     if (selectedAnswer !== null) return;
 
-    setSelectedAnswer(index);
     const isCorrect = index === currentQuestion.answer;
 
-    const nextProgress: ProgressState = {
-      ...progress,
-      solvedAnswers: progress.solvedAnswers + 1,
-      correctAnswers: progress.correctAnswers + (isCorrect ? 1 : 0),
-      reviewQueue: isCorrect
-        ? progress.reviewQueue
-        : Array.from(new Set([selectedLesson.title, ...progress.reviewQueue])).slice(0, 4),
-    };
+    setSelectedAnswer(index);
 
-    await persistProgress(nextProgress);
-    
-    if (!isCorrect) {
-      try {
-        const wrongAnswerRecord = addWrongAnswer(
-          selectedLesson.id,
-          selectedLesson.title,
-          quizIndex,
-          currentQuestion.question,
-          index,
-          currentQuestion.answer || 0,
-          currentQuestion.explanation,
-          currentQuestion.difficulty as 'easy' | 'medium' | 'hard'
-        );
-        
-        const WRONG_ANSWERS_KEY = 'finstudy-wrong-answers-v1';
-        const existingWrongAnswers = await AsyncStorage.getItem(WRONG_ANSWERS_KEY);
-        const wrongAnswers = existingWrongAnswers ? JSON.parse(existingWrongAnswers) : [];
-        const updatedWrongAnswers = [
-          ...wrongAnswers.filter((wa: WrongAnswer) => wa.id !== wrongAnswerRecord.id),
-          wrongAnswerRecord
-        ];
-        await AsyncStorage.setItem(WRONG_ANSWERS_KEY, JSON.stringify(updatedWrongAnswers));
-      } catch (err) {
-        console.error('오답 저장 실패:', err);
-      }
-    }
-    
     if (isCorrect) {
       haptic.success();
+      const newProgress = { ...progress };
+      newProgress.totalXP += 10;
+      newProgress.streak += 1;
+      saveProgress(newProgress);
     } else {
       haptic.error();
+      const wrongAnswer: WrongAnswer = {
+        id: currentQuestion.id,
+        question: currentQuestion.question,
+        userAnswer: index,
+        correctAnswer: currentQuestion.answer || 0,
+        explanation: currentQuestion.explanation,
+        difficulty: currentQuestion.difficulty as 'easy' | 'medium' | 'hard',
+      };
+      addWrongAnswer(wrongAnswer);
     }
   }
 
-  async function moveNext() {
-    if (selectedAnswer === null) return;
-
-    if (!isQuizComplete) {
-      haptic.light();
-      setQuizIndex((prev) => prev + 1);
+  function moveNext() {
+    if (isQuizComplete) {
+      setShowDoneModal(true);
+      setMode('home');
+    } else {
+      setQuizIndex(quizIndex + 1);
       setSelectedAnswer(null);
       setEssayAnswer('');
-      return;
+      setShowSocraticQuiz(false);
+      setShowEssayAnalysis(false);
+      setEssayAnalysis(null);
+      setEssayRetryCount(0);
     }
-
-    const alreadyCompleted = progress.completedLessonIds.includes(selectedLesson.id);
-    const completedLessonIds = alreadyCompleted
-      ? progress.completedLessonIds
-      : [...progress.completedLessonIds, selectedLesson.id];
-
-    const nextProgress: ProgressState = {
-      ...progress,
-      xp: progress.xp + (alreadyCompleted ? 10 : 35),
-      streak: alreadyCompleted ? progress.streak : progress.streak + 1,
-      completedLessonIds,
-    };
-
-    await persistProgress(nextProgress);
-    haptic.success();
-    setShowDoneModal(true);
-    
-    // 추가 질문 모달 띄우기 (1.5초 후)
-    setTimeout(() => {
-      setShowAskModal(true);
-    }, 1500);
-    setMode('home');
-    setQuizIndex(0);
-    setSelectedAnswer(null);
-    setEssayAnswer('');
   }
 
-  function renderHeader() {
-    return (
-      <View className="rounded-[28px] bg-surface px-5 py-5 border border-border">
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-[26px] font-bold text-foreground">📚 FinStudy</Text>
-            <Text className="mt-2 text-sm text-muted">경제 기사를 짧게 읽고 바로 이해도를 점검하세요.</Text>
-          </View>
-              <View className="rounded-full bg-primary px-4 py-2">
-                <Text className="text-sm font-semibold text-white">⭐ {progress.xp}</Text>
-              </View>
-        </View>
-      </View>
-    );
+  function handleRetryEssayAnswer(newAnswer: string) {
+    if (!essayAnalysis || !dynamicSocraticQuestion) return;
+
+    setIsAnalyzingEssay(true);
+    setEssayRetryCount(1);
+
+    reanalyzeEssayAnswer(
+      apiKey,
+      firstEssayAnswer,
+      newAnswer,
+      dynamicSocraticQuestion,
+      selectedLesson
+    )
+      .then(result => {
+        setEssayAnalysis(result.analysis);
+        setEssayFollowUpQuestion(result.followUpQuestion);
+      })
+      .catch(error => {
+        console.error('재답변 분석 실패:', error);
+      })
+      .finally(() => {
+        setIsAnalyzingEssay(false);
+      });
   }
 
-  function renderStatusCards() {
-    return (
-      <View className="flex-row gap-3">
-        <View className="flex-1 rounded-[22px] bg-surface p-5 border border-border">
-          <Text className="text-2xl mb-2">🔥</Text>
-          <Text className="text-xs font-semibold text-muted">연속 학습</Text>
-          <Text className="mt-3 text-2xl font-bold text-foreground">{progress.streak}일</Text>
-          <Text className="mt-2 text-xs text-muted">하루 1개 기사만 완료해도 유지됩니다.</Text>
-        </View>
-        <View className="flex-1 rounded-[22px] bg-surface p-5 border border-border">
-          <Text className="text-2xl mb-2">📊</Text>
-          <Text className="text-xs font-semibold text-muted">정답률</Text>
-          <Text className="mt-3 text-2xl font-bold text-foreground">{accuracy}%</Text>
-          <Text className="mt-2 text-xs text-muted">지금까지 푼 문항 {progress.solvedAnswers}개</Text>
-        </View>
-      </View>
-    );
+  function handleCloseEssayAnalysis() {
+    // 서술형 답안 분석 완료 후 다음 문제로 이동
+    const { xpEarned } = recordEssayAnalysis(essayAnalysis!, currentQuestion.id, essayAnswer);
+    const newProgress = { ...progress };
+    newProgress.totalXP += xpEarned;
+    saveProgress(newProgress);
+
+    setShowEssayAnalysis(false);
+    moveNext();
   }
 
-  function renderLessonList() {
-    const categories = ['all', ...new Set(allLessons.map(l => l.category))];
-    const filteredLessons = selectedCategory === 'all' 
-      ? allLessons 
-      : allLessons.filter(l => l.category === selectedCategory);
-
+  if (mode === 'detail') {
     return (
-      <View className="gap-4">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-lg font-bold text-foreground">📖 오늘의 기사</Text>
-          <Pressable
-            onPress={handleRefresh}
-            disabled={isRefreshing}
-            style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-          >
-            <Text className="text-xl">{isRefreshing ? '🔄' : '🔄'}</Text>
-          </Pressable>
-        </View>
-        
-        {/* 카테고리 필터 */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8 }}
-        >
-          {categories.map((cat) => (
-            <Pressable
-              key={cat}
-              onPress={() => setSelectedCategory(cat)}
-              style={({ pressed }) => [{
-                backgroundColor: selectedCategory === cat ? '#0a7ea4' : '#f5f5f5',
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 16,
-                opacity: pressed ? 0.8 : 1,
-              }]}
-            >
-              <Text className={`text-xs font-semibold ${
-                selectedCategory === cat ? 'text-white' : 'text-foreground'
-              }`}>
-                {cat === 'all' ? '전체' : cat}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        {filteredLessons.map((lesson, index) => {
-          const completed = progress.completedLessonIds.includes(lesson.id);
-          return (
-            <Pressable
-              key={lesson.id}
-              onPress={() => openLesson(lesson)}
-              style={({ pressed }) => [styles.cardPressable, pressed && styles.pressedCard]}
-            >
-              <View className="rounded-[24px] border border-border bg-surface p-5">
-                <View className="flex-row items-center justify-between mb-3">
-                  <Text className="text-xs font-semibold text-muted">📰 {lesson.category}</Text>
-                  <View className="flex-row items-center gap-3">
-                    <Pressable
-                      onPress={() => toggleSaveArticle(lesson.id, lesson.title, lesson.category)}
-                      style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
-                    >
-                      <Text className="text-lg">{savedArticleIds.has(lesson.id) ? '🔖' : '🔗'}</Text>
-                    </Pressable>
-                    <View className="rounded-full bg-[#E8F5E9] px-3 py-1">
-                      <Text className="text-xs font-semibold text-[#2E7D32]">
-                        {completed ? '✅ 완료됨' : `${allLessons.indexOf(lesson) + 1}번째 추천`}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                <Text className="text-[18px] font-bold leading-7 text-foreground">{lesson.title}</Text>
-                <Text className="mt-3 text-[15px] leading-7 text-muted">{lesson.summary}</Text>
-                <View className="mt-4 flex-row items-center justify-between">
-                  <Text className="text-sm text-muted">⏱️ {lesson.source} · {lesson.readTime}</Text>
-                  <Text className="text-sm font-semibold text-primary">→ 학습 시작</Text>
-                </View>
-              </View>
-            </Pressable>
-          );
-        })}
-        
-        <Pressable
-          onPress={() => setMode('review')}
-          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-        >
-          <View className="rounded-[24px] border-2 border-primary bg-[#E8F5E9] p-5">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1">
-                <Text className="text-lg font-bold text-primary">📚 오늘의 기사 리뷰</Text>
-                <Text className="text-sm text-primary mt-1">망각곡선 기반 오답 복습</Text>
-              </View>
-              <Text className="text-2xl">→</Text>
-            </View>
-          </View>
-        </Pressable>
-      </View>
-    );
-  }
-
-  function renderReviewView() {
-    return (
-      <ReviewScreen
-        onBack={() => setMode('home')}
-        onReviewQuestion={(wrongAnswer: WrongAnswer) => {
-          // 복습 문제 풀기 모드로 전환
-          console.log('Review question:', wrongAnswer);
-        }}
-      />
-    );
-  }
-
-  function renderDetailView() {
-    return (
-      <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-        {renderHeader()}
-        <Pressable onPress={() => setMode('home')} style={({ pressed }) => [styles.backButton, pressed && styles.pressedButton]}>
-          <Text className="text-sm font-semibold text-primary">← 오늘의 기사로 돌아가기</Text>
-        </Pressable>
-        <View className="rounded-[28px] bg-surface p-6 border border-border">
-          <Text className="text-xs font-semibold text-muted">📰 {selectedLesson.category}</Text>
-          <Text className="mt-4 text-[22px] font-bold leading-8 text-foreground">{selectedLesson.title}</Text>
-          <Text className="mt-5 text-[16px] leading-8 text-muted">{selectedLesson.summary}</Text>
-          <View className="mt-6 gap-3">
-            <Text className="text-sm font-semibold text-muted">💡 핵심 포인트</Text>
-            {selectedLesson.keyPoints.map((point) => (
-              <View key={point} className="rounded-[18px] bg-[#E8F5E9] px-4 py-4">
-                <Text className="text-[15px] leading-7 text-foreground">• {point}</Text>
-              </View>
-            ))}
-          </View>
-          <View className="mt-6">
-            <Text className="text-sm font-semibold text-muted mb-3">🏷️ 경제 용어</Text>
-            <View className="flex-row flex-wrap gap-2">
-              {selectedLesson.terms.map((term) => (
-                <Pressable
-                  key={term}
-                  onPress={() => {
-                    const termData = searchTerm(term);
-                    if (termData) {
-                      setSelectedTerm(termData);
-                      setShowTermModal(true);
-                    }
-                  }}
-                  style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-                >
-                  <View className="rounded-full bg-[#E8F5E9] px-3 py-2">
-                    <Text className="text-xs font-semibold text-primary">{term}</Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-          <Pressable onPress={startQuiz} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}>
-            <Text className="text-center text-base font-bold text-white">❓ 이 기사로 퀴즈 시작</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    );
-  }
-
-  function renderQuizView() {
-    return (
-      <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-        {renderHeader()}
-        <Pressable onPress={() => setShowExitModal(true)} style={({ pressed }) => [styles.backButton, pressed && styles.pressedButton]}>
-          <Text className="text-sm font-semibold text-primary">← 학습 종료</Text>
-        </Pressable>
-        <View className="rounded-[28px] bg-surface p-8 border border-border">
+      <ScreenContainer>
+        <View className="flex-1">
           <View className="flex-row items-center justify-between mb-4">
-            <View className="flex-row items-center gap-3">
-              <Text className="text-sm font-semibold text-muted">📝 {selectedLesson.title}</Text>
-              <View className={`px-2.5 py-1 rounded-full ${
-                currentQuestion.difficulty === 'easy' ? 'bg-green-100' :
-                currentQuestion.difficulty === 'medium' ? 'bg-yellow-100' :
-                'bg-red-100'
-              }`}>
-                <Text className={`text-xs font-bold ${
-                  currentQuestion.difficulty === 'easy' ? 'text-green-700' :
-                  currentQuestion.difficulty === 'medium' ? 'text-yellow-700' :
-                  'text-red-700'
-                }`}>
-                  {currentQuestion.difficulty === 'easy' ? '초' :
-                   currentQuestion.difficulty === 'medium' ? '중' :
-                   '상'}
-                </Text>
-              </View>
+            <Pressable onPress={() => setMode('home')}>
+              <Text className="text-lg font-bold text-primary">← 뒤로</Text>
+            </Pressable>
+            <Text className="text-lg font-bold text-foreground">{selectedLesson.title}</Text>
+            <Pressable onPress={() => toggleSaveArticle(selectedLesson.id, selectedLesson.title, selectedLesson.category)}>
+              <Text className="text-lg">{savedArticleIds.has(selectedLesson.id) ? '❤️' : '🤍'}</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView>
+            <View className="gap-4">
+              <Text className="text-base text-muted leading-relaxed">{selectedLesson.content}</Text>
+              <Pressable
+                onPress={() => setMode('quiz')}
+                className="bg-primary rounded-lg py-3"
+              >
+                <Text className="text-center font-bold text-white">📝 퀴즈 시작</Text>
+              </Pressable>
             </View>
-            <Text className="text-sm font-semibold text-primary">
-              {quizIndex + 1} / {selectedLesson.quiz.length}
+          </ScrollView>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (mode === 'review') {
+    return <ReviewScreen onBack={() => setMode('home')} />;
+  }
+
+  if (mode === 'quiz') {
+    return (
+      <ScreenContainer>
+        <ScrollView className="flex-1">
+          <View className="gap-4 pb-8">
+            <View className="flex-row justify-between items-center">
+              <Pressable onPress={() => setShowExitModal(true)}>
+                <Text className="text-lg font-bold text-primary">← 나가기</Text>
+              </Pressable>
+              <Text className="text-sm font-semibold text-primary">
+                {quizIndex + 1} / {selectedLesson.quiz.length}
+              </Text>
+            </View>
+            <View className="h-2 overflow-hidden rounded-full bg-[#E8F5E9] mb-6">
+              <View
+                style={{ width: `${((quizIndex + 1) / selectedLesson.quiz.length) * 100}%` }}
+                className="h-full rounded-full bg-primary"
+              />
+            </View>
+            <Text className="text-[16px] font-bold leading-6 text-foreground mb-6 flex-wrap" numberOfLines={3}>
+              {currentQuestion.question.length > 80 
+                ? currentQuestion.question.substring(0, 80) + '...' 
+                : currentQuestion.question}
             </Text>
-          </View>
-          <View className="h-2 overflow-hidden rounded-full bg-[#E8F5E9] mb-6">
-            <View
-              style={{ width: `${((quizIndex + 1) / selectedLesson.quiz.length) * 100}%` }}
-              className="h-full rounded-full bg-primary"
-            />
-          </View>
-          <Text className="text-[16px] font-bold leading-6 text-foreground mb-6 flex-wrap" numberOfLines={3}>
-            {currentQuestion.question.length > 80 
-              ? currentQuestion.question.substring(0, 80) + '...' 
-              : currentQuestion.question}
-          </Text>
-          <View className="gap-3 mb-6">
-            {currentQuestion.type === 'essay' ? (
-              <View className="p-4 rounded-lg bg-blue-50 border border-blue-300 gap-3">
-                <Text className="text-sm text-blue-700 font-semibold mb-2">서술형 답안 입력</Text>
-                <TextInput
-                  className="bg-white border border-blue-200 rounded-lg p-3 text-base"
-                  placeholder="답안을 입력하세요"
-                  multiline
-                  numberOfLines={4}
-                  editable={selectedAnswer === null}
-                  value={essayAnswer}
-                  onChangeText={setEssayAnswer}
-                />
-                <Text className="text-xs text-blue-600">{essayAnswer.length}자</Text>
-                <Pressable
-                  onPress={async () => {
-                    if (essayAnswer.trim()) {
-                      setSelectedAnswer(0);
-                      if (currentQuestion.difficulty === 'hard') {
+            <View className="gap-3 mb-6">
+              {currentQuestion.type === 'essay' ? (
+                <View className="p-4 rounded-lg bg-blue-50 border border-blue-300 gap-3">
+                  <Text className="text-sm text-blue-700 font-semibold mb-2">서술형 답안 입력</Text>
+                  <TextInput
+                    className="bg-white border border-blue-200 rounded-lg p-3 text-base"
+                    placeholder="답안을 입력하세요"
+                    multiline
+                    numberOfLines={4}
+                    editable={selectedAnswer === null}
+                    value={essayAnswer}
+                    onChangeText={setEssayAnswer}
+                  />
+                  <Text className="text-xs text-blue-600">{essayAnswer.length}자</Text>
+                  <Pressable
+                    onPress={async () => {
+                      if (essayAnswer.trim()) {
+                        setSelectedAnswer(0);
                         setIsAnalyzingEssay(true);
+                        setFirstEssayAnswer(essayAnswer);
                         try {
+                          if (apiKey) {
+                            const dynamicQuestion = createDynamicSocraticQuestion(selectedLesson, currentQuestion);
+                            const result = await analyzeEssayAnswer(
+                              apiKey,
+                              essayAnswer,
+                              dynamicQuestion,
+                              selectedLesson
+                            );
+                            setEssayAnalysis(result.analysis);
+                            setEssayFollowUpQuestion(result.followUpQuestion);
+                            setEssayRetryCount(0);
+                            setDynamicSocraticQuestion(dynamicQuestion);
+                            setShowEssayAnalysis(true);
+                          } else {
+                            const dynamicQuestion = createDynamicSocraticQuestion(selectedLesson, currentQuestion);
+                            setDynamicSocraticQuestion(dynamicQuestion);
+                            setShowSocraticQuiz(true);
+                          }
+                        } catch (error) {
+                          console.error('답안 분석 실패:', error);
                           const dynamicQuestion = createDynamicSocraticQuestion(selectedLesson, currentQuestion);
                           setDynamicSocraticQuestion(dynamicQuestion);
-                          setShowSocraticQuiz(true);
-                        } catch (error) {
-                          console.error('동적 소크라테스식 질문 생성 실패:', error);
                           setShowSocraticQuiz(true);
                         } finally {
                           setIsAnalyzingEssay(false);
                         }
                       }
-                    }
-                  }}
-                  disabled={!essayAnswer.trim() || selectedAnswer !== null || isAnalyzingEssay}
-                  style={({ pressed }) => [{
-                    paddingVertical: 12,
-                    paddingHorizontal: 16,
-                    borderRadius: 8,
-                    backgroundColor: essayAnswer.trim() && selectedAnswer === null && !isAnalyzingEssay ? '#0DFA64' : '#ccc',
-                    opacity: pressed ? 0.85 : 1,
-                  }]}
-                >
-                  <Text className="text-center font-semibold text-white">{isAnalyzingEssay ? '분석 중...' : '✓ 답안 제출'}</Text>
-                </Pressable>
-              </View>
-            ) : currentQuestion.choices?.map((choice, index) => {
-              const isCorrect = index === currentQuestion.answer;
-              const isSelected = index === selectedAnswer;
-              const showResult = selectedAnswer !== null;
-
-              return (
-                <Pressable
-                  key={index}
-                  onPress={() => handleAnswer(index)}
-                  disabled={selectedAnswer !== null}
-                  style={({ pressed }) => [
-                    styles.answerButton,
-                    {
-                      backgroundColor: showResult
-                        ? isCorrect
-                          ? '#4CAF50'
-                          : isSelected
-                            ? '#F44336'
-                            : answerSurfaces[index]
-                        : answerSurfaces[index],
-                      borderColor: showResult
-                        ? isCorrect
-                          ? '#4CAF50'
-                          : isSelected
-                            ? '#F44336'
-                            : answerColors[index]
-                        : answerColors[index],
-                      opacity: pressed && !showResult ? 0.7 : 1,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color: showResult
-                        ? isCorrect || isSelected
-                          ? '#fff'
-                          : answerColors[index]
-                        : answerColors[index],
                     }}
-                    className="font-bold text-base"
+                    disabled={!essayAnswer.trim() || selectedAnswer !== null || isAnalyzingEssay}
+                    style={({ pressed }) => [{
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      borderRadius: 8,
+                      backgroundColor: essayAnswer.trim() && selectedAnswer === null && !isAnalyzingEssay ? '#0DFA64' : '#ccc',
+                      opacity: pressed ? 0.85 : 1,
+                    }]}
                   >
-                    {String.fromCharCode(65 + index)}. {choice}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                    <Text className="text-center font-semibold text-white">{isAnalyzingEssay ? '분석 중...' : '✓ 답안 제출'}</Text>
+                  </Pressable>
+                </View>
+              ) : currentQuestion.choices?.map((choice, index) => {
+                const isCorrect = index === currentQuestion.answer;
+                const isSelected = index === selectedAnswer;
+                const showResult = selectedAnswer !== null;
 
-          {selectedAnswer !== null && (
-            <View className="mb-6 gap-4">
-              <View className={`rounded-[16px] p-4 ${
-                selectedAnswer === currentQuestion.answer
-                  ? 'bg-green-50 border border-green-300'
-                  : 'bg-red-50 border border-red-300'
-              }`}>
-                <Text className={`text-lg font-bold ${
+                return (
+                  <Pressable
+                    key={index}
+                    onPress={() => handleAnswer(index)}
+                    disabled={selectedAnswer !== null}
+                    style={({ pressed }) => [
+                      styles.answerButton,
+                      {
+                        backgroundColor: showResult
+                          ? isCorrect
+                            ? '#4CAF50'
+                            : isSelected
+                              ? '#F44336'
+                              : answerSurfaces[index]
+                          : answerSurfaces[index],
+                        borderColor: showResult
+                          ? isCorrect
+                            ? '#4CAF50'
+                            : isSelected
+                              ? '#F44336'
+                              : answerColors[index]
+                          : answerColors[index],
+                        opacity: pressed && !showResult ? 0.7 : 1,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        color: showResult
+                          ? isCorrect || isSelected
+                            ? '#fff'
+                            : answerColors[index]
+                          : answerColors[index],
+                      }}
+                      className="font-bold text-base"
+                    >
+                      {String.fromCharCode(65 + index)}. {choice}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {selectedAnswer !== null && currentQuestion.type !== 'essay' && (
+              <View className="mb-6 gap-4">
+                <View className={`rounded-[16px] p-4 ${
                   selectedAnswer === currentQuestion.answer
-                    ? 'text-green-700'
-                    : 'text-red-700'
+                    ? 'bg-green-50 border border-green-300'
+                    : 'bg-red-50 border border-red-300'
                 }`}>
-                  {selectedAnswer === currentQuestion.answer
-                    ? '✅ 정답입니다!'
-                    : '❌ 오답입니다!'}
-                </Text>
-              </View>
+                  <Text className={`text-lg font-bold ${
+                    selectedAnswer === currentQuestion.answer
+                      ? 'text-green-700'
+                      : 'text-red-700'
+                  }`}>
+                    {selectedAnswer === currentQuestion.answer
+                      ? '✅ 정답입니다!'
+                      : '❌ 오답입니다!'}
+                  </Text>
+                </View>
 
-              <View className="rounded-[16px] bg-slate-50 border border-slate-200 p-4 gap-3">
-                <Text className="text-sm font-semibold text-foreground">📋 정답 확인</Text>
-                <View className="gap-2">
-                  <View className="flex-row items-center gap-2">
-                    <Text className="text-sm text-muted">당신의 답:</Text>
-                    <View className="flex-1 rounded-lg bg-white px-3 py-2 border border-slate-300">
-                      <Text className="text-sm font-semibold text-foreground">
-                        {currentQuestion.type === 'essay' ? '서술형 답안' : `${String.fromCharCode(65 + selectedAnswer)}. ${currentQuestion.choices?.[selectedAnswer]}`}
-                      </Text>
-                    </View>
-                  </View>
-                  {selectedAnswer !== currentQuestion.answer && (
+                <View className="rounded-[16px] bg-slate-50 border border-slate-200 p-4 gap-3">
+                  <Text className="text-sm font-semibold text-foreground">📋 정답 확인</Text>
+                  <View className="gap-2">
                     <View className="flex-row items-center gap-2">
-                      <Text className="text-sm text-muted">정답:</Text>
-                      <View className="flex-1 rounded-lg bg-green-50 px-3 py-2 border border-green-300">
-                        <Text className="text-sm font-semibold text-green-700">
-                          {currentQuestion.type === 'essay' ? '서술형 문제' : `${String.fromCharCode(65 + (currentQuestion.answer || 0))}. ${currentQuestion.choices?.[currentQuestion.answer || 0]}`}
+                      <Text className="text-sm text-muted">당신의 답:</Text>
+                      <View className="flex-1 rounded-lg bg-white px-3 py-2 border border-slate-300">
+                        <Text className="text-sm font-semibold text-foreground">
+                          {`${String.fromCharCode(65 + selectedAnswer)}. ${currentQuestion.choices?.[selectedAnswer]}`}
                         </Text>
                       </View>
                     </View>
-                  )}
+                    {selectedAnswer !== currentQuestion.answer && (
+                      <View className="flex-row items-center gap-2">
+                        <Text className="text-sm text-muted">정답:</Text>
+                        <View className="flex-1 rounded-lg bg-green-50 px-3 py-2 border border-green-300">
+                          <Text className="text-sm font-semibold text-green-700">
+                            {`${String.fromCharCode(65 + (currentQuestion.answer || 0))}. ${currentQuestion.choices?.[currentQuestion.answer || 0]}`}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
                 </View>
+
+                <PremiumExplanation
+                  text={currentQuestion.explanation}
+                  isPremium={true}
+                  onReveal={() => {
+                    if (Platform.OS !== 'web') {
+                      haptic.success();
+                    }
+                  }}
+                />
+
+                {currentQuestion.difficulty && isSocraticQuizApplicable(currentQuestion.difficulty) && (
+                  <Pressable
+                    onPress={() => setShowSocraticQuiz(true)}
+                    style={({ pressed }) => [{
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      borderRadius: 8,
+                      backgroundColor: '#A8D5BA',
+                      opacity: pressed ? 0.85 : 1,
+                    }]}
+                  >
+                    <Text className="text-center font-semibold text-white">💭 소크라테스식 문답법으로 심화 학습</Text>
+                  </Pressable>
+                )}
               </View>
+            )}
 
-              <PremiumExplanation
-                text={currentQuestion.explanation}
-                isPremium={true}
-                onReveal={() => {
-                  if (Platform.OS !== 'web') {
-                    haptic.success();
-                  }
-                }}
-              />
-
-              {/* 소크라테스식 문답법 버튼 - 심화 1, 2 문제만 표시 */}
-              {currentQuestion.difficulty && isSocraticQuizApplicable(currentQuestion.difficulty) && (
-                <Pressable
-                  onPress={() => setShowSocraticQuiz(true)}
-                  style={({ pressed }) => [{
-                    paddingVertical: 12,
-                    paddingHorizontal: 16,
-                    borderRadius: 8,
-                    backgroundColor: '#A8D5BA',
-                    opacity: pressed ? 0.85 : 1,
-                  }]}
-                >
-                  <Text className="text-center font-semibold text-white">💭 소크라테스식 문답법으로 심화 학습</Text>
-                </Pressable>
-              )}
-            </View>
-          )}
-
-          {selectedAnswer !== null && (
-            <Pressable onPress={moveNext} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}>
-              <Text className="text-center text-base font-bold text-white">
-                {isQuizComplete ? '✅ 완료' : '→ 다음 문제'}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      </ScrollView>
+            {selectedAnswer !== null && (
+              <Pressable onPress={moveNext} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}>
+                <Text className="text-center text-base font-bold text-white">
+                  {isQuizComplete ? '✅ 완료' : '→ 다음 문제'}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        </ScrollView>
+      </ScreenContainer>
     );
   }
 
@@ -700,50 +486,69 @@ export default function TodayScreen() {
   }
 
   return (
-    <ScreenContainer className="p-0">
-      {mode === 'home' && (
-        <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-          {renderHeader()}
-          {renderStatusCards()}
-          {renderLessonList()}
-        </ScrollView>
-      )}
-      {mode === 'detail' && renderDetailView()}
-      {mode === 'quiz' && renderQuizView()}
-      {mode === 'review' && renderReviewView()}
+    <ScreenContainer>
+      <ScrollView className="flex-1">
+        <View className="gap-6 pb-8">
+          <View className="flex-row justify-between items-center">
+            <Text className="text-3xl font-bold text-foreground">📚 FinStudy</Text>
+            <Pressable onPress={() => setMode('review')}>
+              <Text className="text-lg">📊</Text>
+            </Pressable>
+          </View>
 
-      <Modal visible={showDoneModal} transparent animationType="fade">
-        <View style={styles.centeredView}>
-          <View style={styles.modalView}>
-            <Text className="text-5xl mb-4">🎉</Text>
-            <Text className="text-2xl font-bold text-foreground text-center mb-2">완료했어요!</Text>
-            <Text className="text-base text-muted text-center mb-6">
-              {progress.xp} XP를 획득했습니다. 계속 학습해보세요!
-            </Text>
+          <View className="bg-primary rounded-lg p-4 gap-2">
+            <Text className="text-white text-sm">오늘의 학습</Text>
+            <Text className="text-white text-2xl font-bold">{progress.totalXP} XP</Text>
+            <Text className="text-white text-xs">🔥 {progress.streak}일 연속</Text>
+          </View>
+
+          <View className="gap-3">
+            <Text className="text-lg font-bold text-foreground">📖 학습 모듈</Text>
+            {allLessons.map((lesson, index) => (
+              <Pressable
+                key={index}
+                onPress={() => {
+                  setSelectedLesson(lesson);
+                  setQuizIndex(0);
+                  setSelectedAnswer(null);
+                  setEssayAnswer('');
+                  setMode('detail');
+                }}
+                className="bg-surface rounded-lg p-4 border border-border"
+              >
+                <Text className="font-bold text-foreground">{lesson.title}</Text>
+                <Text className="text-sm text-muted mt-1">{lesson.summary.substring(0, 60)}...</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
+
+      <Modal visible={showDoneModal} animationType="fade" transparent>
+        <View className="flex-1 bg-black/50 items-center justify-center">
+          <View className="bg-white rounded-lg p-6 w-4/5 gap-4">
+            <Text className="text-2xl font-bold text-center text-foreground">🎉 완료!</Text>
+            <Text className="text-center text-muted">모든 문제를 풀었습니다.</Text>
             <Pressable
               onPress={() => setShowDoneModal(false)}
-              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
+              className="bg-primary rounded-lg py-3"
             >
-              <Text className="text-center text-base font-bold text-white">→ 계속하기</Text>
+              <Text className="text-center font-bold text-white">확인</Text>
             </Pressable>
           </View>
         </View>
       </Modal>
 
-      <Modal visible={showExitModal} transparent animationType="fade">
-        <View style={styles.centeredView}>
-          <View style={styles.modalView}>
-            <Text className="text-4xl mb-4">⏳</Text>
-            <Text className="text-xl font-bold text-foreground text-center mb-2">정말 학습을 종료하시나요?</Text>
-            <Text className="text-sm text-muted text-center mb-6">
-              조금만 더 풀면 경험치를 받을 수 있어요!
-            </Text>
-            <View className="flex-row gap-3">
+      <Modal visible={showExitModal} animationType="fade" transparent>
+        <View className="flex-1 bg-black/50 items-center justify-center">
+          <View className="bg-white rounded-lg p-6 w-4/5 gap-4">
+            <Text className="text-lg font-bold text-foreground">퀴즈를 나가시겠습니까?</Text>
+            <View className="flex-row gap-2">
               <Pressable
                 onPress={() => setShowExitModal(false)}
-                style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
+                className="flex-1 bg-slate-200 rounded-lg py-2"
               >
-                <Text className="text-center text-base font-bold text-primary">계속 풀기</Text>
+                <Text className="text-center font-bold text-foreground">계속하기</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -753,117 +558,91 @@ export default function TodayScreen() {
                   setSelectedAnswer(null);
                   setEssayAnswer('');
                 }}
-                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
+                className="flex-1 bg-red-500 rounded-lg py-2"
               >
-                <Text className="text-center text-base font-bold text-white">종료하기</Text>
+                <Text className="text-center font-bold text-white">나가기</Text>
               </Pressable>
             </View>
           </View>
         </View>
       </Modal>
 
-      <TermDetailModal
-        visible={showTermModal}
-        term={selectedTerm}
-        onClose={() => setShowTermModal(false)}
-      />
-      <AskQuestionModal
-        visible={showAskModal}
-        articleTitle={selectedLesson.title}
-        onClose={() => setShowAskModal(false)}
-        onSubmit={handleAskQuestion}
-      />
+      {showEssayAnalysis && (
+        <EssayAnalysisModal
+          visible={showEssayAnalysis}
+          analysis={essayAnalysis}
+          followUpQuestion={essayFollowUpQuestion}
+          userAnswer={essayAnswer}
+          onRetryAnswer={handleRetryEssayAnswer}
+          onClose={handleCloseEssayAnalysis}
+          isLoading={isAnalyzingEssay}
+          allowRetry={essayRetryCount === 0}
+          retryCount={essayRetryCount}
+        />
+      )}
 
       {showSocraticQuiz && currentQuestion.difficulty && dynamicSocraticQuestion && (
-        <Modal visible={showSocraticQuiz} transparent animationType="slide">
-          <SocraticQuiz
-            question={dynamicSocraticQuestion}
-            onComplete={(response) => {
-              setSocraticResponse(response);
-              setShowSocraticQuiz(false);
-            }}
-            onClose={() => setShowSocraticQuiz(false)}
-          />
+        <SocraticQuiz
+          question={dynamicSocraticQuestion}
+          userAnswer={essayAnswer}
+          onClose={() => {
+            setShowSocraticQuiz(false);
+            moveNext();
+          }}
+        />
+      )}
+
+      {showSocraticQuiz && currentQuestion.difficulty && !dynamicSocraticQuestion && (
+        <Modal visible={showSocraticQuiz} animationType="slide" transparent={false}>
+          <ScreenContainer>
+            <View className="flex-1 items-center justify-center">
+              <Text className="text-lg text-muted">소크라테스식 질문을 불러오는 중...</Text>
+            </View>
+          </ScreenContainer>
         </Modal>
       )}
-      {showSocraticQuiz && currentQuestion.difficulty && !dynamicSocraticQuestion && (
-        <Modal visible={showSocraticQuiz} transparent animationType="slide">
-          <SocraticQuiz
-            question={getSocraticQuestionById('socratic_advanced_1_1')!}
-            onComplete={(response) => {
-              setSocraticResponse(response);
-              setShowSocraticQuiz(false);
-            }}
-            onClose={() => setShowSocraticQuiz(false)}
-          />
-        </Modal>
+
+      {showTermModal && selectedTerm && (
+        <TermDetailModal
+          visible={showTermModal}
+          term={selectedTerm}
+          onClose={() => setShowTermModal(false)}
+        />
+      )}
+
+      {showAskModal && (
+        <AskQuestionModal
+          visible={showAskModal}
+          articleTitle={selectedLesson.title}
+          onClose={() => setShowAskModal(false)}
+          onSubmit={async (question) => {
+            try {
+              const response = await askQuestionAboutArticle(apiKey, selectedLesson, question);
+              console.log('답변:', response);
+            } catch (err) {
+              console.error('질문 전송 실패:', err);
+            }
+          }}
+        />
       )}
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  contentContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 32,
-    gap: 20,
-  },
-  cardPressable: {
-    overflow: 'hidden',
-  },
-  pressedCard: {
-    opacity: 0.7,
-  },
-  backButton: {
-    paddingVertical: 12,
-    marginBottom: 8,
-  },
-  pressedButton: {
-    opacity: 0.6,
-  },
-  primaryButton: {
-    backgroundColor: '#A8D5BA',
-    borderRadius: 16,
-    paddingVertical: 16,
-    marginTop: 20,
-    borderWidth: 0,
-    flex: 1,
-  },
-  secondaryButton: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 16,
-    paddingVertical: 16,
-    marginTop: 20,
-    borderWidth: 1,
-    borderColor: '#0a7ea4',
-    flex: 1,
-  },
   answerButton: {
-    borderRadius: 16,
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
+    borderRadius: 8,
     borderWidth: 2,
   },
-  centeredView: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  primaryButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#0A7EA4',
   },
-  modalView: {
-    margin: 20,
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 35,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+  pressedButton: {
+    opacity: 0.85,
   },
 });
