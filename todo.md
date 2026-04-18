@@ -269,3 +269,10 @@
 - [ ] 전체 기능 단날 테스트
 - [ ] 초기 체크포인트 생성
 - [ ] 최종 배포 중비나리 실행
+
+
+## 🚨 긴급: 서술형 문제 재답변 제출 크리티컬 버그
+- [x] 버그 원인 진단 (essayContext 누락, stale state 참조)
+- [x] 버그 수정 (essay-analysis-modal.tsx controlled component 변경, essayContext 추가)
+- [x] 테스트 및 검증 (TypeScript 오류 0개)
+- [x] 즉시 배포 (개발 서버 정상 실행)

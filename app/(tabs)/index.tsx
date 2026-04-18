@@ -71,6 +71,11 @@ export default function TodayScreen() {
   const [finalEssayFeedback, setFinalEssayFeedback] = useState<EssayAnalysisResult | null>(null);
   const [showFinalFeedback, setShowFinalFeedback] = useState(false);
   const [essaySecondAnswer, setEssaySecondAnswer] = useState<string>('');
+  const [essayContext, setEssayContext] = useState<{
+    question: string;
+    articleContent: string;
+    firstAnswer: string;
+  } | null>(null);
 
   useEffect(() => {
     void loadProgress();
@@ -547,16 +552,21 @@ export default function TodayScreen() {
                     if (essayAnswer.trim()) {
                       setSelectedAnswer(0);
                       if (apiKey) {
-                        setIsAnalyzingEssayAnswer(true);
-                        try {
-                          const analysis = await analyzeEssayAnswer(
-                            currentQuestion.question,
-                            essayAnswer,
-                            selectedLesson.summary,
-                            apiKey
-                          );
-                          setEssayAnalysis(analysis);
-                          setShowEssayAnalysis(true);
+        setIsAnalyzingEssayAnswer(true);
+        try {
+          const analysis = await analyzeEssayAnswer(
+            currentQuestion.question,
+            essayAnswer,
+            selectedLesson.summary,
+            apiKey
+          );
+          setEssayAnalysis(analysis);
+          setEssayContext({
+            question: currentQuestion.question,
+            articleContent: selectedLesson.summary,
+            firstAnswer: essayAnswer,
+          });
+          setShowEssayAnalysis(true);
                         } catch (error) {
                           console.error('서술형 답변 분석 실패:', error);
                           alert('답변 분석 중 오류가 발생했습니다.');
@@ -868,20 +878,26 @@ export default function TodayScreen() {
       {/* 서술형 답변 분석 모달 */}
       <EssayAnalysisModal
         visible={showEssayAnalysis}
-        question={currentQuestion.question}
-        articleContent={selectedLesson.summary}
-        firstAnswer={essayAnswer}
+        question={essayContext?.question || currentQuestion.question}
+        articleContent={essayContext?.articleContent || selectedLesson.summary}
+        firstAnswer={essayContext?.firstAnswer || essayAnswer}
         analysis={essayAnalysis}
         isLoading={isAnalyzingEssayAnswer}
+        secondAnswer={essaySecondAnswer}
+        onSecondAnswerChange={setEssaySecondAnswer}
         onSecondAnswerSubmit={async (secondAnswer) => {
-          setEssaySecondAnswer(secondAnswer);
+          if (!essayContext) {
+            console.error('essayContext가 없습니다');
+            alert('필수 데이터가 누락되었습니다. 다시 시도해주세요.');
+            return;
+          }
           setIsFinalAnalyzing(true);
           try {
             const finalFeedback = await generateFinalFeedback(
-              currentQuestion.question,
-              essayAnswer,
+              essayContext.question,
+              essayContext.firstAnswer,
               secondAnswer,
-              selectedLesson.summary,
+              essayContext.articleContent,
               apiKey
             );
             setFinalEssayFeedback(finalFeedback);
@@ -897,6 +913,7 @@ export default function TodayScreen() {
           setShowEssayAnalysis(false);
           setEssayAnalysis(null);
           setEssaySecondAnswer('');
+          setEssayContext(null);
         }}
         finalFeedback={finalEssayFeedback}
         isFinalLoading={isFinalAnalyzing}

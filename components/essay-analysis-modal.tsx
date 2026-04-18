@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Modal,
   View,
@@ -20,6 +20,8 @@ interface EssayAnalysisModalProps {
   firstAnswer: string;
   analysis: EssayAnalysisResult | null;
   isLoading: boolean;
+  secondAnswer: string;
+  onSecondAnswerChange: (text: string) => void;
   onSecondAnswerSubmit: (answer: string) => void;
   onClose: () => void;
   finalFeedback?: EssayAnalysisResult | null;
@@ -30,8 +32,12 @@ interface EssayAnalysisModalProps {
 export function EssayAnalysisModal({
   visible,
   question,
+  articleContent,
+  firstAnswer,
   analysis,
   isLoading,
+  secondAnswer,
+  onSecondAnswerChange,
   onSecondAnswerSubmit,
   onClose,
   finalFeedback,
@@ -39,7 +45,6 @@ export function EssayAnalysisModal({
   showFinal,
 }: EssayAnalysisModalProps) {
   const colors = useColors();
-  const [secondAnswer, setSecondAnswer] = useState('');
 
   const handleSubmitSecondAnswer = () => {
     if (!secondAnswer.trim()) {
@@ -48,6 +53,14 @@ export function EssayAnalysisModal({
       }
       return;
     }
+    
+    // 방어 코드: 필수 데이터 검증
+    if (!question || !articleContent || !firstAnswer) {
+      console.error('필수 데이터 누락:', { question, articleContent, firstAnswer });
+      alert('필수 데이터가 누락되었습니다. 다시 시도해주세요.');
+      return;
+    }
+
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -250,7 +263,7 @@ export function EssayAnalysisModal({
                   placeholderTextColor={colors.muted}
                   multiline
                   value={secondAnswer}
-                  onChangeText={setSecondAnswer}
+                  onChangeText={onSecondAnswerChange}
                   editable={!isFinalLoading}
                 />
               </View>
