@@ -16,9 +16,11 @@ import { TermDetailModal } from '@/components/term-detail-modal';
 import { AskQuestionModal } from '@/components/ask-question-modal';
 import { ReviewScreen } from '@/components/review-screen';
 import { SocraticQuiz } from '@/components/socratic-quiz';
+import { EssayFeedbackModal } from '@/components/essay-feedback-modal';
 import { isSocraticQuizApplicable, getSocraticQuestionById } from '@/lib/socratic-quiz-system';
 import type { SocraticResponse } from '@/lib/socratic-quiz-system';
 import { createDynamicSocraticQuestion, generateDynamicSocraticAnalysisPrompt } from '@/lib/dynamic-socratic-question';
+import { generateEssayFeedback, type EssayFeedback } from '@/lib/essay-feedback-handler';
 import type { WrongAnswer } from '@/lib/spaced-repetition';
 import { addWrongAnswer, getReviewDue } from '@/lib/spaced-repetition';
 import { defaultProgress, lessons, type ArticleLesson, type ProgressState } from '@/lib/finstudy-data';
@@ -57,6 +59,9 @@ export default function TodayScreen() {
   const [essayAnswer, setEssayAnswer] = useState<string>('');
   const [isAnalyzingEssay, setIsAnalyzingEssay] = useState(false);
   const [dynamicSocraticQuestion, setDynamicSocraticQuestion] = useState<any>(null);
+  const [showEssayFeedback, setShowEssayFeedback] = useState(false);
+  const [essayFeedback, setEssayFeedback] = useState<EssayFeedback | null>(null);
+  const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
 
   useEffect(() => {
     void loadProgress();
@@ -659,8 +664,46 @@ export default function TodayScreen() {
                 }}
               />
 
-              {/* 소크라테스식 문답법 버튼 - 심화 1, 2 문제만 표시 */}
-              {currentQuestion.difficulty && isSocraticQuizApplicable(currentQuestion.difficulty) && (
+              {/* 서술형 답안 피드백 버튼 */}
+              {currentQuestion.type === 'essay' && (
+                <Pressable
+                  onPress={async () => {
+                    if (apiKey && essayAnswer.trim()) {
+                      setIsGeneratingFeedback(true);
+                      try {
+                        const feedback = await generateEssayFeedback(
+                          apiKey,
+                          essayAnswer,
+                          currentQuestion,
+                          selectedLesson,
+                          selectedAnswer === currentQuestion.answer
+                        );
+                        setEssayFeedback(feedback);
+                        setShowEssayFeedback(true);
+                      } catch (error) {
+                        console.error('피드백 생성 실패:', error);
+                      } finally {
+                        setIsGeneratingFeedback(false);
+                      }
+                    }
+                  }}
+                  disabled={isGeneratingFeedback || !apiKey}
+                  style={({ pressed }) => [{
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    borderRadius: 8,
+                    backgroundColor: isGeneratingFeedback || !apiKey ? '#ccc' : '#4A90E2',
+                    opacity: pressed ? 0.85 : 1,
+                  }]}
+                >
+                  <Text className="text-center font-semibold text-white">
+                    {isGeneratingFeedback ? '피드백 생성 중...' : '💡 상세 피드백 보기'}
+                  </Text>
+                </Pressable>
+              )}
+
+              {/* 소크라테스식 문답법 버튼 - 심화 1, 2 문제만 표시 (서술형 제외) */}
+              {currentQuestion.difficulty && isSocraticQuizApplicable(currentQuestion.difficulty) && currentQuestion.type !== 'essay' && (
                 <Pressable
                   onPress={() => setShowSocraticQuiz(true)}
                   style={({ pressed }) => [{
@@ -773,6 +816,15 @@ export default function TodayScreen() {
         onClose={() => setShowAskModal(false)}
         onSubmit={handleAskQuestion}
       />
+
+      {showEssayFeedback && essayFeedback && (
+        <EssayFeedbackModal
+          visible={showEssayFeedback}
+          feedback={essayFeedback}
+          onClose={() => setShowEssayFeedback(false)}
+          isLoading={isGeneratingFeedback}
+        />
+      )}
 
       {showSocraticQuiz && currentQuestion.difficulty && dynamicSocraticQuestion && (
         <Modal visible={showSocraticQuiz} transparent animationType="slide">
