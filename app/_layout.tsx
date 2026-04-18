@@ -18,6 +18,9 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
+import { OnboardingQuiz, type OnboardingResult } from "@/components/onboarding-quiz";
+import { isOnboardingCompleted, saveOnboardingData } from "@/lib/onboarding-storage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -32,11 +35,48 @@ export default function RootLayout() {
 
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
+  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
 
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
   }, []);
+
+  // 온보딩 상태 확인
+  useEffect(() => {
+    async function checkOnboarding() {
+      try {
+        const completed = await isOnboardingCompleted();
+        setShowOnboarding(!completed);
+      } catch (err) {
+        console.error('온보딩 상태 확인 오류:', err);
+        setShowOnboarding(true);
+      } finally {
+        setIsCheckingOnboarding(false);
+      }
+    }
+    checkOnboarding();
+  }, []);
+
+  const handleOnboardingComplete = async (result: OnboardingResult) => {
+    try {
+      await saveOnboardingData({
+        level: result.level,
+        score: result.score,
+        interests: result.interests,
+      });
+      const existingProgress = await AsyncStorage.getItem('finstudy-progress-v1');
+      if (existingProgress) {
+        const progress = JSON.parse(existingProgress);
+        progress.xp = (progress.xp || 0) + 100;
+        await AsyncStorage.setItem('finstudy-progress-v1', JSON.stringify(progress));
+      }
+      setShowOnboarding(false);
+    } catch (err) {
+      console.error('온보딩 저장 오류:', err);
+    }
+  };
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
     setInsets(metrics.insets);
@@ -90,6 +130,9 @@ export default function RootLayout() {
             <Stack.Screen name="oauth/callback" />
           </Stack>
           <StatusBar style="auto" />
+          {!isCheckingOnboarding && (
+            <OnboardingQuiz visible={showOnboarding} onComplete={handleOnboardingComplete} />
+          )}
         </QueryClientProvider>
       </trpc.Provider>
     </GestureHandlerRootView>
