@@ -109,6 +109,15 @@ export default function ProfileScreen() {
     }
   };
 
+  const addFriendHandler = (userId: string) => {
+    const targetUser = sampleLeagueUsers.find((u) => u.id === userId);
+    if (targetUser) {
+      sendFriendRequest(currentUser.id, userId, targetUser.name);
+      alert('친구 요청을 보냈습니다!');
+      setShowAddFriendModal(false);
+    }
+  };
+
   return (
     <ScreenContainer className="p-0">
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
@@ -462,7 +471,16 @@ export default function ProfileScreen() {
               <>
                 {communityTab === 'friends' && (
                   <View>
-                    <Text className="text-lg font-bold text-foreground mb-4">👥 나의 친구</Text>
+                    <View className="flex-row items-center justify-between mb-4">
+                      <Text className="text-lg font-bold text-foreground">👥 나의 친구</Text>
+                      <Pressable
+                        onPress={() => setShowAddFriendModal(true)}
+                        style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+                        className="bg-primary rounded-lg px-3 py-2"
+                      >
+                        <Text className="text-white font-semibold text-sm">➕ 추가</Text>
+                      </Pressable>
+                    </View>
                     {friends.length > 0 ? (
                       <FlatList
                         data={friends}
@@ -578,6 +596,66 @@ export default function ProfileScreen() {
         onClose={() => setShowAdminLogin(false)}
         onLoginSuccess={handleAdminLoginSuccess}
       />
+
+      {/* 친구 추가 모달 */}
+      <Modal
+        visible={showAddFriendModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddFriendModal(false)}
+      >
+        <View className="flex-1 bg-background">
+          <ScreenContainer className="p-4">
+            <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+              {/* 헤더 */}
+              <View className="flex-row items-center justify-between mb-6">
+                <Text className="text-2xl font-bold text-foreground">친구 추가</Text>
+                <Pressable
+                  onPress={() => setShowAddFriendModal(false)}
+                  style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <Text className="text-2xl">✕</Text>
+                </Pressable>
+              </View>
+
+              {/* 검색 입력 */}
+              <TextInput
+                placeholder="사용자명 검색"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholderTextColor={colors.muted}
+                className="bg-surface border border-border rounded-lg p-3 text-foreground mb-6"
+              />
+
+              {/* 추천 사용자 목록 */}
+              <Text className="text-sm font-semibold text-foreground mb-3">추천 사용자</Text>
+              <FlatList
+                data={sampleLeagueUsers.filter((user) => user.id !== currentUser.id)}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+                renderItem={({ item }) => (
+                  <View className="rounded-lg bg-surface p-4 mb-3 flex-row items-center justify-between">
+                    <View className="flex-row items-center gap-3 flex-1">
+                      <Text className="text-2xl">{item.avatar}</Text>
+                      <View className="flex-1">
+                        <Text className="font-semibold text-foreground">{item.name}</Text>
+                        <Text className="text-xs text-muted">Lv.{calculateLevel(item.totalXP)}</Text>
+                      </View>
+                    </View>
+                    <Pressable
+                      onPress={() => addFriendHandler(item.id)}
+                      style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
+                      className="bg-primary rounded-lg px-3 py-2"
+                    >
+                      <Text className="text-white font-semibold text-sm">추가</Text>
+                    </Pressable>
+                  </View>
+                )}
+              />
+            </ScrollView>
+          </ScreenContainer>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }

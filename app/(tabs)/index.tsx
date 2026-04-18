@@ -552,7 +552,7 @@ export default function TodayScreen() {
                           const analysis = await analyzeEssayAnswer(
                             currentQuestion.question,
                             essayAnswer,
-                            selectedLesson.content || selectedLesson.summary,
+                            selectedLesson.summary,
                             apiKey
                           );
                           setEssayAnalysis(analysis);
@@ -869,7 +869,7 @@ export default function TodayScreen() {
       <EssayAnalysisModal
         visible={showEssayAnalysis}
         question={currentQuestion.question}
-        articleContent={selectedLesson.content || selectedLesson.summary}
+        articleContent={selectedLesson.summary}
         firstAnswer={essayAnswer}
         analysis={essayAnalysis}
         isLoading={isAnalyzingEssayAnswer}
@@ -881,7 +881,7 @@ export default function TodayScreen() {
               currentQuestion.question,
               essayAnswer,
               secondAnswer,
-              selectedLesson.content || selectedLesson.summary,
+              selectedLesson.summary,
               apiKey
             );
             setFinalEssayFeedback(finalFeedback);
