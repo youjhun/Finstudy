@@ -1,7 +1,8 @@
-import { ScrollView, Text, View, Pressable } from 'react-native';
+import { ScrollView, Text, View, Pressable, FlatList, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { useState, useEffect } from 'react';
 import { ScreenContainer } from '@/components/screen-container';
 import { useColors } from '@/hooks/use-colors';
+import { cn } from '@/lib/utils';
 import {
   sampleLeagueUsers,
   type UserProfile,
@@ -9,16 +10,48 @@ import {
   calculateLevel,
   createDefaultProfile,
 } from '@/lib/streak-league-data';
+import {
+  getFriends,
+  getGlobalRanking,
+  getFriendRanking,
+  getStreakShares,
+  getActivityFeed,
+  sendFriendRequest,
+  acceptFriendRequest,
+  removeFriend,
+  likeStreakShare,
+  likeActivity,
+  getSocialStats,
+  getLevelProgress,
+  type Friend,
+  type RankingEntry,
+  type StreakShare,
+  type ActivityFeed,
+  type SocialStats,
+} from '@/lib/social-system';
 import { AdminLoginModal } from '@/components/admin-login-modal';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
+
+type MainTab = 'profile' | 'league' | 'community';
+type CommunityTab = 'friends' | 'ranking' | 'activity';
 
 export default function ProfileScreen() {
   const colors = useColors();
   const [currentUser, setCurrentUser] = useState<UserProfile>(createDefaultProfile());
   const [leagueRanking, setLeagueRanking] = useState<UserProfile[]>([]);
-  const [selectedTab, setSelectedTab] = useState<'profile' | 'league'>('profile');
+  const [selectedTab, setSelectedTab] = useState<MainTab>('profile');
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+  
+  // 커뮤니티 탭 상태
+  const [communityTab, setCommunityTab] = useState<CommunityTab>('friends');
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [ranking, setRanking] = useState<RankingEntry[]>([]);
+  const [activity, setActivity] = useState<ActivityFeed[]>([]);
+  const [stats, setStats] = useState<SocialStats | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAddFriendModal, setShowAddFriendModal] = useState(false);
 
   useEffect(() => {
     // 현재 사용자 설정 (첫 번째 샘플 사용자)
@@ -27,12 +60,44 @@ export default function ProfileScreen() {
     const sorted = [...sampleLeagueUsers].sort((a, b) => a.league.leagueRank - b.league.leagueRank);
     setLeagueRanking(sorted);
   }, []);
+  
+  // 커뮤니티 데이터 로드
+  useEffect(() => {
+    if (selectedTab === 'community') {
+      loadCommunityData();
+    }
+  }, [selectedTab, communityTab]);
+  
+  const loadCommunityData = async () => {
+    setLoading(true);
+    try {
+      const friendsData = await getFriends();
+      const rankingData = communityTab === 'ranking' ? await getGlobalRanking() : [];
+      const activityData = communityTab === 'activity' ? await getActivityFeed(20) : [];
+      const statsData = await getSocialStats(currentUser.id, currentUser.totalXP);
+      if (friendsData) setFriends(friendsData);
+      if (rankingData) setRanking(rankingData);
+      if (activityData) setActivity(activityData);
+      if (statsData) setStats(statsData);
+    } catch (error) {
+      console.error('커뮤니티 데이터 로드 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const handleTabPress = (tab: 'profile' | 'league') => {
+  const handleTabPress = (tab: MainTab) => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setSelectedTab(tab);
+  };
+  
+  const handleCommunityTabPress = (tab: CommunityTab) => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setCommunityTab(tab);
   };
 
   const leagueColor = LEAGUE_COLORS[currentUser.league.currentLeague];
@@ -54,16 +119,17 @@ export default function ProfileScreen() {
         </View>
 
         {/* Tab Navigation */}
-        <View className="flex-row px-4 gap-3 mb-6">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16, gap: 8 }}>
           <Pressable
             onPress={() => handleTabPress('profile')}
             style={({ pressed }) => [
               {
-                flex: 1,
+                paddingVertical: 10,
+                paddingHorizontal: 16,
                 backgroundColor: selectedTab === 'profile' ? colors.primary : colors.surface,
-                paddingVertical: 12,
-                borderRadius: 10,
-                alignItems: 'center',
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: selectedTab === 'profile' ? colors.primary : colors.border,
                 opacity: pressed ? 0.8 : 1,
               },
             ]}
@@ -80,11 +146,12 @@ export default function ProfileScreen() {
             onPress={() => handleTabPress('league')}
             style={({ pressed }) => [
               {
-                flex: 1,
+                paddingVertical: 10,
+                paddingHorizontal: 16,
                 backgroundColor: selectedTab === 'league' ? colors.primary : colors.surface,
-                paddingVertical: 12,
-                borderRadius: 10,
-                alignItems: 'center',
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: selectedTab === 'league' ? colors.primary : colors.border,
                 opacity: pressed ? 0.8 : 1,
               },
             ]}
@@ -97,7 +164,29 @@ export default function ProfileScreen() {
               🏆 리그
             </Text>
           </Pressable>
-        </View>
+          <Pressable
+            onPress={() => handleTabPress('community')}
+            style={({ pressed }) => [
+              {
+                paddingVertical: 10,
+                paddingHorizontal: 16,
+                backgroundColor: selectedTab === 'community' ? colors.primary : colors.surface,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: selectedTab === 'community' ? colors.primary : colors.border,
+                opacity: pressed ? 0.8 : 1,
+              },
+            ]}
+          >
+            <Text
+              className={`font-bold text-sm ${
+                selectedTab === 'community' ? 'text-background' : 'text-foreground'
+              }`}
+            >
+              🌍 커뮤니티
+            </Text>
+          </Pressable>
+        </ScrollView>
 
         {selectedTab === 'profile' && (
           <View className="px-4 pb-8">
@@ -262,7 +351,7 @@ export default function ProfileScreen() {
                     </View>
 
                     {/* Points */}
-                    <View className="items-end">
+                    <View className="items-center">
                       <Text className="font-bold text-foreground">{user.league.leaguePoints}</Text>
                       <Text className="text-xs text-muted">포인트</Text>
                     </View>
@@ -294,6 +383,180 @@ export default function ProfileScreen() {
             </View>
           </View>
         )}
+
+        {selectedTab === 'community' && (
+          <View className="px-4 pb-8">
+            {/* Community Tab Navigation */}
+            <View className="flex-row gap-2 mb-6">
+              <Pressable
+                onPress={() => handleCommunityTabPress('friends')}
+                style={({ pressed }) => [
+                  {
+                    flex: 1,
+                    backgroundColor: communityTab === 'friends' ? colors.primary : colors.surface,
+                    paddingVertical: 10,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <Text
+                  className={`font-semibold text-sm ${
+                    communityTab === 'friends' ? 'text-background' : 'text-foreground'
+                  }`}
+                >
+                  👥 친구
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleCommunityTabPress('ranking')}
+                style={({ pressed }) => [
+                  {
+                    flex: 1,
+                    backgroundColor: communityTab === 'ranking' ? colors.primary : colors.surface,
+                    paddingVertical: 10,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <Text
+                  className={`font-semibold text-sm ${
+                    communityTab === 'ranking' ? 'text-background' : 'text-foreground'
+                  }`}
+                >
+                  🏅 순위
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleCommunityTabPress('activity')}
+                style={({ pressed }) => [
+                  {
+                    flex: 1,
+                    backgroundColor: communityTab === 'activity' ? colors.primary : colors.surface,
+                    paddingVertical: 10,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <Text
+                  className={`font-semibold text-sm ${
+                    communityTab === 'activity' ? 'text-background' : 'text-foreground'
+                  }`}
+                >
+                  📝 활동
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Community Content */}
+            {loading ? (
+              <View className="flex-1 items-center justify-center py-12">
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            ) : (
+              <>
+                {communityTab === 'friends' && (
+                  <View>
+                    <Text className="text-lg font-bold text-foreground mb-4">👥 나의 친구</Text>
+                    {friends.length > 0 ? (
+                      <FlatList
+                        data={friends}
+                        keyExtractor={(item) => item.userId}
+                        scrollEnabled={false}
+                        renderItem={({ item }) => (
+                          <View className="rounded-lg bg-surface p-4 mb-3 flex-row items-center justify-between">
+                            <View className="flex-row items-center gap-3 flex-1">
+                              <Text className="text-2xl">{item.avatar}</Text>
+                              <View className="flex-1">
+                                <Text className="font-semibold text-foreground">{item.name}</Text>
+                                <Text className="text-xs text-muted">Lv.{item.level}</Text>
+                              </View>
+                            </View>
+                            <Pressable
+                              onPress={() => removeFriend(item.userId)}
+                              style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
+                            >
+                              <Text className="text-sm font-semibold text-error">제거</Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      />
+                    ) : (
+                      <View className="items-center justify-center py-8">
+                        <Text className="text-2xl mb-2">👥</Text>
+                        <Text className="text-foreground font-semibold">친구가 없습니다</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {communityTab === 'ranking' && (
+                  <View>
+                    <Text className="text-lg font-bold text-foreground mb-4">🏅 전역 순위</Text>
+                    {ranking.length > 0 ? (
+                      <FlatList
+                        data={ranking}
+                        keyExtractor={(item) => item.userId}
+                        scrollEnabled={false}
+                        renderItem={({ item, index }) => (
+                          <View className="rounded-lg bg-surface p-4 mb-3 flex-row items-center gap-3">
+                            <View className="w-8 h-8 rounded-full bg-primary items-center justify-center">
+                              <Text className="font-bold text-background text-sm">#{index + 1}</Text>
+                            </View>
+                            <View className="flex-1">
+                              <Text className="font-semibold text-foreground">{item.name}</Text>
+                              <Text className="text-xs text-muted">{item.totalXP} XP</Text>
+                            </View>
+                            <Text className="font-bold text-primary">Lv.{item.level}</Text>
+                          </View>
+                        )}
+                      />
+                    ) : (
+                      <View className="items-center justify-center py-8">
+                        <Text className="text-2xl mb-2">📊</Text>
+                        <Text className="text-foreground font-semibold">순위 데이터 없음</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {communityTab === 'activity' && (
+                  <View>
+                    <Text className="text-lg font-bold text-foreground mb-4">📝 최근 활동</Text>
+                    {activity.length > 0 ? (
+                      <FlatList
+                        data={activity}
+                        keyExtractor={(item) => item.id}
+                        scrollEnabled={false}
+                        renderItem={({ item }) => (
+                          <View className="rounded-lg bg-surface p-4 mb-3">
+                            <View className="flex-row items-center gap-2 mb-2">
+                              <Text className="text-lg">{item.avatar}</Text>
+                              <Text className="font-semibold text-foreground flex-1">{item.name}</Text>
+                              <Text className="text-xs text-muted">{new Date(item.timestamp).toLocaleDateString('ko-KR')}</Text>
+                            </View>
+                            <Text className="text-sm text-muted">{item.description}</Text>
+                          </View>
+                        )}
+                      />
+                    ) : (
+                      <View className="items-center justify-center py-8">
+                        <Text className="text-2xl mb-2">📝</Text>
+                        <Text className="text-foreground font-semibold">활동이 없습니다</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        )}
+
         {/* Admin Login Button */}
         <View className="px-4 py-4 border-t border-border">
           <Pressable
