@@ -18,6 +18,8 @@ import { ReviewScreen } from '@/components/review-screen';
 import { SocraticQuiz } from '@/components/socratic-quiz';
 import { EssayFeedbackModal } from '@/components/essay-feedback-modal';
 import { isSocraticQuizApplicable, getSocraticQuestionById } from '@/lib/socratic-quiz-system';
+import { EssayAnalysisModal } from '@/components/essay-analysis-modal';
+import { analyzeEssayAnswer, generateFinalFeedback, type EssayAnalysisResult } from '@/lib/essay-analysis-handler';
 import type { SocraticResponse } from '@/lib/socratic-quiz-system';
 import { createDynamicSocraticQuestion, generateDynamicSocraticAnalysisPrompt } from '@/lib/dynamic-socratic-question';
 import { generateEssayFeedback, type EssayFeedback } from '@/lib/essay-feedback-handler';
@@ -62,6 +64,13 @@ export default function TodayScreen() {
   const [showEssayFeedback, setShowEssayFeedback] = useState(false);
   const [essayFeedback, setEssayFeedback] = useState<EssayFeedback | null>(null);
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
+  const [showEssayAnalysis, setShowEssayAnalysis] = useState(false);
+  const [essayAnalysis, setEssayAnalysis] = useState<EssayAnalysisResult | null>(null);
+  const [isAnalyzingEssayAnswer, setIsAnalyzingEssayAnswer] = useState(false);
+  const [isFinalAnalyzing, setIsFinalAnalyzing] = useState(false);
+  const [finalEssayFeedback, setFinalEssayFeedback] = useState<EssayAnalysisResult | null>(null);
+  const [showFinalFeedback, setShowFinalFeedback] = useState(false);
+  const [essaySecondAnswer, setEssaySecondAnswer] = useState<string>('');
 
   useEffect(() => {
     void loadProgress();
@@ -537,31 +546,36 @@ export default function TodayScreen() {
                   onPress={async () => {
                     if (essayAnswer.trim()) {
                       setSelectedAnswer(0);
-                      if (currentQuestion.difficulty === 'hard') {
-                        setIsAnalyzingEssay(true);
+                      if (apiKey) {
+                        setIsAnalyzingEssayAnswer(true);
                         try {
-                          const dynamicQuestion = createDynamicSocraticQuestion(selectedLesson, currentQuestion);
-                          setDynamicSocraticQuestion(dynamicQuestion);
-                          setShowSocraticQuiz(true);
+                          const analysis = await analyzeEssayAnswer(
+                            currentQuestion.question,
+                            essayAnswer,
+                            selectedLesson.content || selectedLesson.summary,
+                            apiKey
+                          );
+                          setEssayAnalysis(analysis);
+                          setShowEssayAnalysis(true);
                         } catch (error) {
-                          console.error('동적 소크라테스식 질문 생성 실패:', error);
-                          setShowSocraticQuiz(true);
+                          console.error('서술형 답변 분석 실패:', error);
+                          alert('답변 분석 중 오류가 발생했습니다.');
                         } finally {
-                          setIsAnalyzingEssay(false);
+                          setIsAnalyzingEssayAnswer(false);
                         }
                       }
                     }
                   }}
-                  disabled={!essayAnswer.trim() || selectedAnswer !== null || isAnalyzingEssay}
+                  disabled={!essayAnswer.trim() || selectedAnswer !== null || isAnalyzingEssayAnswer}
                   style={({ pressed }) => [{
                     paddingVertical: 12,
                     paddingHorizontal: 16,
                     borderRadius: 8,
-                    backgroundColor: essayAnswer.trim() && selectedAnswer === null && !isAnalyzingEssay ? '#0DFA64' : '#ccc',
+                    backgroundColor: essayAnswer.trim() && selectedAnswer === null && !isAnalyzingEssayAnswer ? '#0DFA64' : '#ccc',
                     opacity: pressed ? 0.85 : 1,
                   }]}
                 >
-                  <Text className="text-center font-semibold text-white">{isAnalyzingEssay ? '분석 중...' : '✓ 답안 제출'}</Text>
+                  <Text className="text-center font-semibold text-white">{isAnalyzingEssayAnswer ? '분석 중...' : '✓ 답안 제출'}</Text>
                 </Pressable>
               </View>
             ) : currentQuestion.choices?.map((choice, index) => {
@@ -850,6 +864,44 @@ export default function TodayScreen() {
           />
         </Modal>
       )}
+
+      {/* 서술형 답변 분석 모달 */}
+      <EssayAnalysisModal
+        visible={showEssayAnalysis}
+        question={currentQuestion.question}
+        articleContent={selectedLesson.content || selectedLesson.summary}
+        firstAnswer={essayAnswer}
+        analysis={essayAnalysis}
+        isLoading={isAnalyzingEssayAnswer}
+        onSecondAnswerSubmit={async (secondAnswer) => {
+          setEssaySecondAnswer(secondAnswer);
+          setIsFinalAnalyzing(true);
+          try {
+            const finalFeedback = await generateFinalFeedback(
+              currentQuestion.question,
+              essayAnswer,
+              secondAnswer,
+              selectedLesson.content || selectedLesson.summary,
+              apiKey
+            );
+            setFinalEssayFeedback(finalFeedback);
+            setShowFinalFeedback(true);
+          } catch (error) {
+            console.error('최종 피드백 생성 실패:', error);
+            alert('최종 피드백 생성 중 오류가 발생했습니다.');
+          } finally {
+            setIsFinalAnalyzing(false);
+          }
+        }}
+        onClose={() => {
+          setShowEssayAnalysis(false);
+          setEssayAnalysis(null);
+          setEssaySecondAnswer('');
+        }}
+        finalFeedback={finalEssayFeedback}
+        isFinalLoading={isFinalAnalyzing}
+        showFinal={showFinalFeedback}
+      />
     </ScreenContainer>
   );
 }
