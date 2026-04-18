@@ -21,6 +21,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { useColors } from '@/hooks/use-colors';
 import { cn } from '@/lib/utils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DUMMY_UGC_CONTENTS } from '@/lib/ugc-dummy-data';
 
 interface UGCContent {
   id: string;
@@ -36,6 +37,8 @@ interface UGCContent {
   timestamp: string;
   category: 'study' | 'tip' | 'question' | 'discussion';
 }
+
+export type { UGCContent };
 
 const UGC_STORAGE_KEY = 'finstudy-ugc-content-v1';
 
@@ -58,9 +61,15 @@ export default function CommunityScreen() {
       const stored = await AsyncStorage.getItem(UGC_STORAGE_KEY);
       if (stored) {
         setContents(JSON.parse(stored));
+      } else {
+        // 첫 실행 시 더미 데이터 초기화
+        await AsyncStorage.setItem(UGC_STORAGE_KEY, JSON.stringify(DUMMY_UGC_CONTENTS));
+        setContents(DUMMY_UGC_CONTENTS);
       }
     } catch (error) {
       console.error('UGC 컨텐츠 로드 실패:', error);
+      // 오류 발생 시에도 더미 데이터 표시
+      setContents(DUMMY_UGC_CONTENTS);
     }
   };
 
@@ -88,7 +97,7 @@ export default function CommunityScreen() {
       const newContent: UGCContent = {
         id: Date.now().toString(),
         userId: 'user-' + Math.random().toString(36).substr(2, 9),
-        userName: '사용자',
+        userName: '내 프로필',
         userAvatar: '👤',
         title,
         description,
@@ -102,32 +111,32 @@ export default function CommunityScreen() {
       const updated = [newContent, ...contents];
       await AsyncStorage.setItem(UGC_STORAGE_KEY, JSON.stringify(updated));
       setContents(updated);
-
-      // 초기화
+      
+      // 입력 필드 초기화
       setTitle('');
       setDescription('');
       setSelectedImage(null);
       setCategory('study');
       setShowUploadModal(false);
+      alert('컨턴촠가 업로드되었습니다!');
     } catch (error) {
       console.error('컨텐츠 업로드 실패:', error);
-      alert('업로드에 실패했습니다.');
+      alert('업로드 실패. 다시 시도해주세요.');
     } finally {
       setLoading(false);
     }
   };
 
   const toggleLike = async (contentId: string) => {
-    const updated = contents.map((item) => {
-      if (item.id === contentId) {
-        return {
-          ...item,
-          liked: !item.liked,
-          likes: item.liked ? item.likes - 1 : item.likes + 1,
-        };
-      }
-      return item;
-    });
+    const updated = contents.map((content) =>
+      content.id === contentId
+        ? {
+            ...content,
+            liked: !content.liked,
+            likes: content.liked ? content.likes - 1 : content.likes + 1,
+          }
+        : content
+    );
     setContents(updated);
     await AsyncStorage.setItem(UGC_STORAGE_KEY, JSON.stringify(updated));
   };
