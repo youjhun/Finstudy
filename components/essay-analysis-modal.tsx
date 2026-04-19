@@ -27,6 +27,7 @@ interface EssayAnalysisModalProps {
   finalFeedback?: EssayAnalysisResult | null;
   isFinalLoading?: boolean;
   showFinal?: boolean;
+  error?: string | null;
 }
 
 export function EssayAnalysisModal({
@@ -43,6 +44,7 @@ export function EssayAnalysisModal({
   finalFeedback,
   isFinalLoading,
   showFinal,
+  error,
 }: EssayAnalysisModalProps) {
   const colors = useColors();
 
@@ -82,6 +84,25 @@ export function EssayAnalysisModal({
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
               <ActivityIndicator size="large" color={colors.primary} />
               <Text style={{ marginTop: 12, color: colors.muted }}>답변 분석 중...</Text>
+            </View>
+          ) : error ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 }}>
+              <View style={{ backgroundColor: colors.surface, padding: 16, borderRadius: 8, borderLeftWidth: 4, borderLeftColor: colors.error }}>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.error, marginBottom: 8 }}>⚠️ 분석 실패</Text>
+                <Text style={{ fontSize: 13, color: colors.foreground, lineHeight: 20 }}>{error}</Text>
+              </View>
+              <Pressable
+                onPress={onClose}
+                style={({ pressed }) => [{
+                  backgroundColor: colors.primary,
+                  padding: 12,
+                  borderRadius: 8,
+                  alignItems: 'center',
+                  opacity: pressed ? 0.8 : 1,
+                }]}
+              >
+                <Text style={{ color: colors.background, fontWeight: '600' }}>닫기</Text>
+              </Pressable>
             </View>
           ) : showFinal && finalFeedback ? (
             // 최종 피드백 화면
