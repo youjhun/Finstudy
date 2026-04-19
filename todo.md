@@ -276,3 +276,11 @@
 - [x] 버그 수정 (essay-analysis-modal.tsx controlled component 변경, essayContext 추가)
 - [x] 테스트 및 검증 (TypeScript 오류 0개)
 - [x] 즉시 배포 (개발 서버 정상 실행)
+
+
+## 🚨 긴급: 앱 아이콘 변경 및 미리보기 버그
+- [x] 버그 원인 진단 (Metro 캠시, 로컬 파일 누락)
+- [x] 아이콘 파일 저장 및 설정 확인 (로컬 파일 모두 대체)
+- [x] app.config.ts 업데이트 (기존 설정 유지)
+- [x] 개발 서버 재시작 (Metro 캠시 클리어)
+- [x] 버그 수정 및 검증 (서버 정상 실행, TypeScript 오류 0개)
