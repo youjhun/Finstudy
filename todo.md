@@ -284,3 +284,11 @@
 - [x] app.config.ts 업데이트 (기존 설정 유지)
 - [x] 개발 서버 재시작 (Metro 캠시 클리어)
 - [x] 버그 수정 및 검증 (서버 정상 실행, TypeScript 오류 0개)
+
+
+## Phase 24: Expo Go 배경색 스타일 수정 - 하얀색 통일
+- [x] 앱 전체 배경색 확인 (theme.config.js, ScreenContainer)
+- [x] 배경색을 하얀색(#ffffff)으로 통일
+- [x] 모든 탭의 배경색 확인 및 수정
+- [x] Expo Go에서 배경색 검증
+- [x] 최종 배포
