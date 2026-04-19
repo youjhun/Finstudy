@@ -636,7 +636,7 @@ export default function TodayScreen() {
             })}
           </View>
 
-          {selectedAnswer !== null && (
+          {selectedAnswer !== null && currentQuestion.type !== 'essay' && (
             <View className="mb-6 gap-4">
               <View className={`rounded-[16px] p-4 ${
                 selectedAnswer === currentQuestion.answer
@@ -661,7 +661,7 @@ export default function TodayScreen() {
                     <Text className="text-sm text-muted">당신의 답:</Text>
                     <View className="flex-1 rounded-lg bg-white px-3 py-2 border border-slate-300">
                       <Text className="text-sm font-semibold text-foreground">
-                        {currentQuestion.type === 'essay' ? '서술형 답안' : `${String.fromCharCode(65 + selectedAnswer)}. ${currentQuestion.choices?.[selectedAnswer]}`}
+                        {`${String.fromCharCode(65 + selectedAnswer)}. ${currentQuestion.choices?.[selectedAnswer]}`}
                       </Text>
                     </View>
                   </View>
@@ -670,7 +670,7 @@ export default function TodayScreen() {
                       <Text className="text-sm text-muted">정답:</Text>
                       <View className="flex-1 rounded-lg bg-green-50 px-3 py-2 border border-green-300">
                         <Text className="text-sm font-semibold text-green-700">
-                          {currentQuestion.type === 'essay' ? '서술형 문제' : `${String.fromCharCode(65 + (currentQuestion.answer || 0))}. ${currentQuestion.choices?.[currentQuestion.answer || 0]}`}
+                          {`${String.fromCharCode(65 + (currentQuestion.answer || 0))}. ${currentQuestion.choices?.[currentQuestion.answer || 0]}`}
                         </Text>
                       </View>
                     </View>
@@ -687,44 +687,6 @@ export default function TodayScreen() {
                   }
                 }}
               />
-
-              {/* 서술형 답안 피드백 버튼 */}
-              {currentQuestion.type === 'essay' && (
-                <Pressable
-                  onPress={async () => {
-                    if (apiKey && essayAnswer.trim()) {
-                      setIsGeneratingFeedback(true);
-                      try {
-                        const feedback = await generateEssayFeedback(
-                          apiKey,
-                          essayAnswer,
-                          currentQuestion,
-                          selectedLesson,
-                          selectedAnswer === currentQuestion.answer
-                        );
-                        setEssayFeedback(feedback);
-                        setShowEssayFeedback(true);
-                      } catch (error) {
-                        console.error('피드백 생성 실패:', error);
-                      } finally {
-                        setIsGeneratingFeedback(false);
-                      }
-                    }
-                  }}
-                  disabled={isGeneratingFeedback || !apiKey}
-                  style={({ pressed }) => [{
-                    paddingVertical: 12,
-                    paddingHorizontal: 16,
-                    borderRadius: 8,
-                    backgroundColor: isGeneratingFeedback || !apiKey ? '#ccc' : '#4A90E2',
-                    opacity: pressed ? 0.85 : 1,
-                  }]}
-                >
-                  <Text className="text-center font-semibold text-white">
-                    {isGeneratingFeedback ? '피드백 생성 중...' : '💡 상세 피드백 보기'}
-                  </Text>
-                </Pressable>
-              )}
 
               {/* 소크라테스식 문답법 버튼 - 심화 1, 2 문제만 표시 (서술형 제외) */}
               {currentQuestion.difficulty && isSocraticQuizApplicable(currentQuestion.difficulty) && currentQuestion.type !== 'essay' && (
@@ -744,12 +706,65 @@ export default function TodayScreen() {
             </View>
           )}
 
+          {/* 서술형 피드백 메시지 - 분석 완료 후 표시 */}
+          {selectedAnswer !== null && currentQuestion.type === 'essay' && essayAnalysis && (
+            <View className="px-4 pb-4 gap-4">
+              <View className="rounded-[16px] bg-blue-50 border border-blue-300 p-4 gap-3">
+                <Text className="text-sm font-semibold text-blue-700">✅ 답변이 분석되었습니다</Text>
+                <Text className="text-sm text-foreground">위의 분석 결과를 참고하여 재답변을 작성해주세요.</Text>
+              </View>
+            </View>
+          )}
+
+          {/* 서술형 피드백 버튼 - 선택사항 */}
+          {selectedAnswer !== null && currentQuestion.type === 'essay' && !essayAnalysis && (
+            <View className="px-4 pb-4 gap-4">
+              <Pressable
+                onPress={async () => {
+                  if (apiKey && essayAnswer.trim()) {
+                    setIsGeneratingFeedback(true);
+                    try {
+                      const feedback = await generateEssayFeedback(
+                        apiKey,
+                        essayAnswer,
+                        currentQuestion,
+                        selectedLesson,
+                        true
+                      );
+                      setEssayFeedback(feedback);
+                      setShowEssayFeedback(true);
+                    } catch (error) {
+                      console.error('피드백 생성 실패:', error);
+                      alert('피드백 생성 중 오류가 발생했습니다.');
+                    } finally {
+                      setIsGeneratingFeedback(false);
+                    }
+                  }
+                }}
+                disabled={isGeneratingFeedback || !apiKey}
+                style={({ pressed }) => [{
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  backgroundColor: isGeneratingFeedback || !apiKey ? '#ccc' : '#4A90E2',
+                  opacity: pressed ? 0.85 : 1,
+                }]}
+              >
+                <Text className="text-center font-semibold text-white">
+                  {isGeneratingFeedback ? '피드백 생성 중...' : '💡 추가 피드백 보기'}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
           {selectedAnswer !== null && (
-            <Pressable onPress={moveNext} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}>
-              <Text className="text-center text-base font-bold text-white">
-                {isQuizComplete ? '✅ 완료' : '→ 다음 문제'}
-              </Text>
-            </Pressable>
+            <View className="px-4 pb-4">
+              <Pressable onPress={moveNext} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}>
+                <Text className="text-center text-base font-bold text-white">
+                  {isQuizComplete ? '✅ 완료' : '→ 다음 문제'}
+                </Text>
+              </Pressable>
+            </View>
           )}
         </View>
       </ScrollView>
