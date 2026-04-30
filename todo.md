@@ -337,3 +337,24 @@
 - [ ] 또래 대비 백분위 계산 및 표시
 - [ ] 프리미엄 유저만 접근 가능하도록 설정
 - [ ] 상세 리포트 UI 디자인 및 구현
+
+
+## Phase 28: 프리미엄 구독 시스템 구현 (완료)
+- [x] 프리미엄 상태 관리 (AsyncStorage 기반) - premium-system.ts 작성
+- [x] 프리미엄 구독 여부 확인 함수 작성 (isValidPremium, activatePremium)
+- [x] 프리미엄 유저 전용 기능 조건부 렌더링
+- [x] 프리미엄 미구독 시 업그레이드 유도 UI
+
+## Phase 29: NCS/자격증 대비 스터디 탭 추가 (완료)
+- [x] NCS 경제 파트 문제 데이터셋 추가 (ncs-certification-data.ts)
+- [x] 금융 자격증(AFPK, 투자자산운용사, TESAT) 문제 데이터셋 추가
+- [x] 학습 탭에 "NCS/자격증 대비" 섹션 추가 (certification-study-tab.tsx)
+- [x] 프리미엄 유저만 접근 가능하도록 설정
+- [x] 각 자격증별 학습 진행도 추적
+
+## Phase 30: 주간 금융 문해력 리포트 프로필 페이지 (완료)
+- [x] 주간 점수 변화 그래프 (weekly-report-system.ts)
+- [x] 취약 개념 분석 (약점 분석)
+- [x] 또래 대비 백분위 계산 및 표시
+- [x] 프리미엄 유저만 접근 가능하도록 설정
+- [x] 상세 리포트 UI 디자인 및 구현 (weekly-report-card.tsx)
