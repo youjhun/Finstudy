@@ -30,6 +30,8 @@ import {
   type SocialStats,
 } from '@/lib/social-system';
 import { AdminLoginModal } from '@/components/admin-login-modal';
+import { usePremium } from '@/lib/premium-context';
+import { WeeklyReportCard } from '@/components/weekly-report-card';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
@@ -38,6 +40,7 @@ type CommunityTab = 'friends' | 'ranking' | 'activity';
 
 export default function ProfileScreen() {
   const colors = useColors();
+  const { isPremium } = usePremium();
   const [currentUser, setCurrentUser] = useState<UserProfile>(createDefaultProfile());
   const [leagueRanking, setLeagueRanking] = useState<UserProfile[]>([]);
   const [selectedTab, setSelectedTab] = useState<MainTab>('profile');
@@ -199,6 +202,13 @@ export default function ProfileScreen() {
 
         {selectedTab === 'profile' && (
           <View className="px-4 pb-8">
+            {/* 주간 금융 문해력 리포트 (프리미엄) */}
+            {isPremium && (
+              <View className="mb-6">
+                <WeeklyReportCard isPremium={isPremium} />
+              </View>
+            )}
+
             {/* User Card */}
             <View className="rounded-[24px] bg-gradient-to-br from-blue-50 to-indigo-50 p-6 border border-blue-200 mb-6">
               <View className="flex-row items-center gap-4 mb-6">
@@ -223,6 +233,33 @@ export default function ProfileScreen() {
                 </View>
               </View>
             </View>
+
+            {/* 프리미엄 구독 상태 */}
+            {!isPremium && (
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== 'web') {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }
+                  alert('프리미엄 구독 페이지로 이동합니다.');
+                }}
+                style={({ pressed }) => [{
+                  backgroundColor: colors.primary,
+                  borderRadius: 16,
+                  padding: 16,
+                  marginBottom: 16,
+                  opacity: pressed ? 0.8 : 1,
+                }]}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1">
+                    <Text className="text-lg font-bold text-white mb-1">✨ 프리미엄 구독</Text>
+                    <Text className="text-xs text-white opacity-80">NCS·자격증·분석 리포트 이용 가능</Text>
+                  </View>
+                  <Text className="text-2xl">→</Text>
+                </View>
+              </Pressable>
+            )}
 
             {/* League Info */}
             <View
@@ -368,6 +405,33 @@ export default function ProfileScreen() {
                 );
               })}
             </View>
+
+            {/* 프리미엄 구독 상태 */}
+            {!isPremium && (
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== 'web') {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }
+                  alert('프리미엄 구독 페이지로 이동합니다.');
+                }}
+                style={({ pressed }) => [{
+                  backgroundColor: colors.primary,
+                  borderRadius: 16,
+                  padding: 16,
+                  marginBottom: 16,
+                  opacity: pressed ? 0.8 : 1,
+                }]}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1">
+                    <Text className="text-lg font-bold text-white mb-1">✨ 프리미엄 구독</Text>
+                    <Text className="text-xs text-white opacity-80">NCS·자격증·분석 리포트 이용 가능</Text>
+                  </View>
+                  <Text className="text-2xl">→</Text>
+                </View>
+              </Pressable>
+            )}
 
             {/* League Info */}
             <View className="rounded-[24px] bg-blue-50 border border-blue-200 p-6 mt-6">

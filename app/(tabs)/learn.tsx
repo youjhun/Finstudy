@@ -12,6 +12,8 @@ import { useColors } from '@/hooks/use-colors';
 import { cn } from '@/lib/utils';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
+import { usePremium } from '@/lib/premium-context';
+import { CertificationStudyTab } from '@/components/certification-study-tab';
 
 import { curriculum, unit2Screens, unit2Problems, type Unit } from '@/lib/curriculum-data';
 import {
@@ -37,7 +39,7 @@ import {
  * 4. 세션 완료 화면 (XP, 스트릭, 다음 버튼)
  */
 
-type ScreenState = 'unit-list' | 'unit-detail' | 'learning' | 'session-complete';
+type ScreenState = 'unit-list' | 'unit-detail' | 'learning' | 'session-complete' | 'certification';
 
 interface LearningTabState {
   screen: ScreenState;
@@ -48,10 +50,21 @@ interface LearningTabState {
 
 export default function LearnScreen() {
   const colors = useColors();
+  const { isPremium } = usePremium();
   const [state, setState] = useState<LearningTabState>({ screen: 'unit-list' });
   const [loading, setLoading] = useState(false);
 
   // ============= 화면 1: 유닛 선택 =============
+  // ============= 조건부 렌더링 =============
+
+  if (state.screen === 'certification') {
+    return (
+      <ScreenContainer className="flex-1 bg-background">
+        <CertificationStudyTab isPremium={isPremium} />
+      </ScreenContainer>
+    );
+  }
+
 
   function renderUnitList() {
     return (
@@ -66,6 +79,33 @@ export default function LearnScreen() {
               6개 유닛으로 경제를 완벽히 이해하세요
             </Text>
           </View>
+
+          {/* NCS/자격증 대비 섹션 (프리미엄) */}
+          {isPremium && (
+            <Pressable
+              onPress={() => {
+                if (Platform.OS !== 'web') {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+                setState({ screen: 'certification' });
+              }}
+              style={({ pressed }) => [{
+                backgroundColor: colors.primary,
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 16,
+                opacity: pressed ? 0.8 : 1,
+              }]}
+            >
+              <View className="flex-row items-center justify-between">
+                <View className="flex-1">
+                  <Text className="text-lg font-bold text-white mb-1">🎯 NCS/자격증 대비</Text>
+                  <Text className="text-xs text-white opacity-80">AFPK · 투자자산운용사 · TESAT</Text>
+                </View>
+                <Text className="text-2xl">→</Text>
+              </View>
+            </Pressable>
+          )}
 
           {/* 유닛 목록 */}
           <View className="gap-3">
