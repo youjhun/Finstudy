@@ -60,7 +60,7 @@ export function AskQuestionModal({
   };
 
   return (
-    <Modal visible={visible} animationType="fade" transparent>
+    <Modal visible={visible} animationType="fade" presentationStyle="overFullScreen">
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
         <View
           style={{
