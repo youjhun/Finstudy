@@ -14,6 +14,8 @@ import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 import { usePremium } from '@/lib/premium-context';
 import { CertificationStudyTab } from '@/components/certification-study-tab';
+import { usePremiumOnboarding } from '@/lib/premium-onboarding-context';
+import { PremiumOnboardingModal } from '@/components/premium-onboarding-modal';
 
 import { curriculum, unit2Screens, unit2Problems, type Unit } from '@/lib/curriculum-data';
 import {
@@ -50,6 +52,8 @@ interface LearningTabState {
 
 export default function LearnScreen() {
   const colors = useColors();
+  const { onboardingState, shouldShowCertificationTutorial } = usePremiumOnboarding();
+  const [showCertificationTutorial, setShowCertificationTutorial] = useState(shouldShowCertificationTutorial);
   const { isPremium } = usePremium();
   const [state, setState] = useState<LearningTabState>({ screen: 'unit-list' });
   const [loading, setLoading] = useState(false);
@@ -58,10 +62,30 @@ export default function LearnScreen() {
   // ============= 조건부 렌더링 =============
 
   if (state.screen === 'certification') {
+    useEffect(() => {
+      if (shouldShowCertificationTutorial && !showCertificationTutorial) {
+        setShowCertificationTutorial(true);
+      }
+    }, [shouldShowCertificationTutorial]);
+
     return (
-      <ScreenContainer className="flex-1 bg-background">
-        <CertificationStudyTab isPremium={isPremium} />
-      </ScreenContainer>
+      <>
+        <ScreenContainer className="flex-1 bg-background">
+          <CertificationStudyTab isPremium={isPremium} />
+        </ScreenContainer>
+        {onboardingState && (
+          <PremiumOnboardingModal
+            tutorial={onboardingState.certificationTutorial}
+            visible={showCertificationTutorial}
+            onClose={() => setShowCertificationTutorial(false)}
+            onNavigate={(screen) => {
+              if (screen === 'certification') {
+                setState({ screen: 'certification' });
+              }
+            }}
+          />
+        )}
+      </>
     );
   }
 

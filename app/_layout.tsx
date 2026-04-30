@@ -21,6 +21,7 @@ import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-run
 import { OnboardingQuiz, type OnboardingResult } from "@/components/onboarding-quiz";
 import { isOnboardingCompleted, saveOnboardingData } from "@/lib/onboarding-storage";
 import { PremiumProvider } from "@/lib/premium-context";
+import { PremiumOnboardingProvider } from "@/lib/premium-onboarding-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -122,8 +123,9 @@ export default function RootLayout() {
   const content = (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <PremiumProvider>
-        <trpc.Provider client={trpcClient} queryClient={queryClient}>
-          <QueryClientProvider client={queryClient}>
+        <PremiumOnboardingProvider>
+          <trpc.Provider client={trpcClient} queryClient={queryClient}>
+            <QueryClientProvider client={queryClient}>
           {/* Default to hiding native headers so raw route segments don't appear (e.g. "(tabs)", "products/[id]"). */}
           {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
@@ -135,8 +137,9 @@ export default function RootLayout() {
           {!isCheckingOnboarding && (
             <OnboardingQuiz visible={showOnboarding} onComplete={handleOnboardingComplete} />
           )}
-          </QueryClientProvider>
-        </trpc.Provider>
+            </QueryClientProvider>
+          </trpc.Provider>
+        </PremiumOnboardingProvider>
       </PremiumProvider>
     </GestureHandlerRootView>
   );

@@ -32,6 +32,8 @@ import {
 import { AdminLoginModal } from '@/components/admin-login-modal';
 import { usePremium } from '@/lib/premium-context';
 import { WeeklyReportCard } from '@/components/weekly-report-card';
+import { usePremiumOnboarding } from '@/lib/premium-onboarding-context';
+import { PremiumOnboardingModal } from '@/components/premium-onboarding-modal';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
@@ -41,6 +43,8 @@ type CommunityTab = 'friends' | 'ranking' | 'activity';
 export default function ProfileScreen() {
   const colors = useColors();
   const { isPremium } = usePremium();
+  const { onboardingState, shouldShowWeeklyReportTutorial } = usePremiumOnboarding();
+  const [showWeeklyReportTutorial, setShowWeeklyReportTutorial] = useState(shouldShowWeeklyReportTutorial);
   const [currentUser, setCurrentUser] = useState<UserProfile>(createDefaultProfile());
   const [leagueRanking, setLeagueRanking] = useState<UserProfile[]>([]);
   const [selectedTab, setSelectedTab] = useState<MainTab>('profile');
@@ -720,6 +724,23 @@ export default function ProfileScreen() {
           </ScreenContainer>
         </View>
       </Modal>
+
+      {/* 주간 리포트 온보딩 튜토리얼 */}
+      {isPremium && onboardingState && (
+        <PremiumOnboardingModal
+          tutorial={onboardingState.weeklyReportTutorial}
+          visible={showWeeklyReportTutorial && isPremium}
+          onClose={() => setShowWeeklyReportTutorial(false)}
+          onNavigate={(screen) => {
+            if (screen === 'profile') {
+              setSelectedTab('profile');
+            }
+          }}
+        />
+      )}
+
+      {/* 관리자 로그인 모달 */}
+      <AdminLoginModal visible={showAdminLogin} onClose={() => setShowAdminLogin(false)} />
     </ScreenContainer>
   );
 }
