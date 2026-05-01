@@ -15,6 +15,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { crawlArticle } from '@/lib/news-crawler';
 import { processArticleWithGemini, processArticlesBatch } from '@/lib/gemini-client';
 import { logoutAdmin } from '@/lib/admin-auth';
+import { activatePremium, cancelPremium, getPremiumStatus } from '@/lib/premium-system';
 import type { CrawledArticle } from '@/lib/news-crawler';
 import * as Haptics from 'expo-haptics';
 
@@ -230,6 +231,38 @@ export default function AdminScreen() {
 
   const currentArticle = generatedArticles[previewIndex];
 
+  const [premiumStatus, setPremiumStatus] = useState<{ isPremium: boolean; expiryDate: string | null } | null>(null);
+
+  useEffect(() => {
+    getPremiumStatus().then(setPremiumStatus);
+  }, []);
+
+  const handleActivatePremium = async () => {
+    try {
+      const result = await activatePremium(30);
+      setPremiumStatus(result);
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      alert('🎉 프리미엄 30일 활성화 완료!');
+    } catch (e) {
+      alert('프리미엄 활성화 실패');
+    }
+  };
+
+  const handleCancelPremium = async () => {
+    try {
+      const result = await cancelPremium();
+      setPremiumStatus(result);
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      alert('프리미엄 구독이 취소되었습니다.');
+    } catch (e) {
+      alert('프리미엄 취소 실패');
+    }
+  };
+
   return (
     <ScreenContainer className="p-0">
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16, paddingTop: 24, paddingBottom: 32 }}>
@@ -400,6 +433,40 @@ export default function AdminScreen() {
               </Text>
             </View>
           </Pressable>
+        </View>
+
+        {/* Premium Test Section */}
+        <View className="rounded-[24px] bg-purple-50 border border-purple-200 p-6 mb-6">
+          <Text className="text-sm font-semibold text-purple-900 mb-3">👑 프리미엄 테스트</Text>
+          <Text className="text-xs text-purple-700 mb-4">
+            현재 상태: {premiumStatus?.isPremium ? `✅ 활성 (만료: ${premiumStatus.expiryDate ? new Date(premiumStatus.expiryDate).toLocaleDateString('ko-KR') : '-'})` : '❌ 비활성'}
+          </Text>
+          <View className="flex-row gap-3">
+            <Pressable
+              onPress={handleActivatePremium}
+              style={({ pressed }) => [{
+                flex: 1,
+                backgroundColor: '#7C3AED',
+                paddingVertical: 12,
+                borderRadius: 12,
+                opacity: pressed ? 0.8 : 1,
+              }]}
+            >
+              <Text className="text-center text-sm font-bold text-white">👑 30일 활성화</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleCancelPremium}
+              style={({ pressed }) => [{
+                flex: 1,
+                backgroundColor: '#f0f0f0',
+                paddingVertical: 12,
+                borderRadius: 12,
+                opacity: pressed ? 0.8 : 1,
+              }]}
+            >
+              <Text className="text-center text-sm font-bold text-foreground">❌ 구독 취소</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Info Section */}

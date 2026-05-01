@@ -31,6 +31,7 @@ import {
 } from '@/lib/social-system';
 import { AdminLoginModal } from '@/components/admin-login-modal';
 import { usePremium } from '@/lib/premium-context';
+import { activatePremium } from '@/lib/premium-system';
 import { WeeklyReportCard } from '@/components/weekly-report-card';
 import { usePremiumOnboarding } from '@/lib/premium-onboarding-context';
 import { PremiumOnboardingModal } from '@/components/premium-onboarding-modal';
@@ -42,7 +43,7 @@ type CommunityTab = 'friends' | 'ranking' | 'activity';
 
 export default function ProfileScreen() {
   const colors = useColors();
-  const { isPremium } = usePremium();
+  const { isPremium, refreshPremiumStatus } = usePremium();
   const { onboardingState, shouldShowWeeklyReportTutorial } = usePremiumOnboarding();
   const [showWeeklyReportTutorial, setShowWeeklyReportTutorial] = useState(shouldShowWeeklyReportTutorial);
   const [currentUser, setCurrentUser] = useState<UserProfile>(createDefaultProfile());
@@ -241,11 +242,20 @@ export default function ProfileScreen() {
             {/* 프리미엄 구독 상태 */}
             {!isPremium && (
               <Pressable
-                onPress={() => {
+                onPress={async () => {
                   if (Platform.OS !== 'web') {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   }
-                  alert('프리미엄 구독 페이지로 이동합니다.');
+                  try {
+                    await activatePremium(30);
+                    await refreshPremiumStatus();
+                    if (Platform.OS !== 'web') {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    }
+                    alert('🎉 프리미엄 구독이 활성화되었습니다! (30일 이용 가능)');
+                  } catch (e) {
+                    alert('구독 활성화에 실패했습니다. 다시 시도해주세요.');
+                  }
                 }}
                 style={({ pressed }) => [{
                   backgroundColor: colors.primary,
@@ -413,11 +423,20 @@ export default function ProfileScreen() {
             {/* 프리미엄 구독 상태 */}
             {!isPremium && (
               <Pressable
-                onPress={() => {
+                onPress={async () => {
                   if (Platform.OS !== 'web') {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   }
-                  alert('프리미엄 구독 페이지로 이동합니다.');
+                  try {
+                    await activatePremium(30);
+                    await refreshPremiumStatus();
+                    if (Platform.OS !== 'web') {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    }
+                    alert('🎉 프리미엄 구독이 활성화되었습니다! (30일 이용 가능)');
+                  } catch (e) {
+                    alert('구독 활성화에 실패했습니다. 다시 시도해주세요.');
+                  }
                 }}
                 style={({ pressed }) => [{
                   backgroundColor: colors.primary,
