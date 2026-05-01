@@ -58,36 +58,12 @@ export default function LearnScreen() {
   const [state, setState] = useState<LearningTabState>({ screen: 'unit-list' });
   const [loading, setLoading] = useState(false);
 
-  // ============= 화면 1: 유닛 선택 =============
-  // ============= 조건부 렌더링 =============
-
-  if (state.screen === 'certification') {
-    useEffect(() => {
-      if (shouldShowCertificationTutorial && !showCertificationTutorial) {
-        setShowCertificationTutorial(true);
-      }
-    }, [shouldShowCertificationTutorial]);
-
-    return (
-      <>
-        <ScreenContainer className="flex-1 bg-background">
-          <CertificationStudyTab isPremium={isPremium} />
-        </ScreenContainer>
-        {onboardingState && (
-          <PremiumOnboardingModal
-            tutorial={onboardingState.certificationTutorial}
-            visible={showCertificationTutorial}
-            onClose={() => setShowCertificationTutorial(false)}
-            onNavigate={(screen) => {
-              if (screen === 'certification') {
-                setState({ screen: 'certification' });
-              }
-            }}
-          />
-        )}
-      </>
-    );
-  }
+  // useEffect는 항상 최상위에서 호출 (Hooks 규칙)
+  useEffect(() => {
+    if (state.screen === 'certification' && shouldShowCertificationTutorial && !showCertificationTutorial) {
+      setShowCertificationTutorial(true);
+    }
+  }, [state.screen, shouldShowCertificationTutorial]);
 
 
   function renderUnitList() {
@@ -567,6 +543,26 @@ export default function LearnScreen() {
       return renderLearning();
     case 'session-complete':
       return renderSessionComplete();
+    case 'certification':
+      return (
+        <>
+          <ScreenContainer className="flex-1 bg-background">
+            <CertificationStudyTab isPremium={isPremium} />
+          </ScreenContainer>
+          {onboardingState && (
+            <PremiumOnboardingModal
+              tutorial={onboardingState.certificationTutorial}
+              visible={showCertificationTutorial}
+              onClose={() => setShowCertificationTutorial(false)}
+              onNavigate={(screen) => {
+                if (screen === 'certification') {
+                  setState({ screen: 'certification' });
+                }
+              }}
+            />
+          )}
+        </>
+      );
     default:
       return renderUnitList();
   }

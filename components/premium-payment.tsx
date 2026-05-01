@@ -1,7 +1,7 @@
 import { Pressable, Text, View, Modal, ScrollView, Platform } from 'react-native';
 import { useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import { activatePremium } from '@/lib/premium-system';
 
 interface PremiumPaymentProps {
   visible: boolean;
@@ -44,18 +44,9 @@ export function PremiumPaymentModal({ visible, onClose, onSuccess }: PremiumPaym
       // 현재는 시뮬레이션
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      // 프리미엘 상태 저장
-      const premiumData = {
-        isPremium: true,
-        plan: planId,
-        purchasedAt: new Date().toISOString(),
-        expiresAt:
-          planId === 'monthly'
-            ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-            : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      };
-
-      await AsyncStorage.setItem('premium-status', JSON.stringify(premiumData));
+      // 프리미엄 상태 저장 (premium-system.ts의 activatePremium 사용 - 키 통일)
+      const daysValid = planId === 'monthly' ? 30 : 365;
+      await activatePremium(daysValid);
 
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
