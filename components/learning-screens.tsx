@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -372,6 +372,12 @@ export function QuizScreen({
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  // 문제가 바뀔 때 상태 초기화
+  useEffect(() => {
+    setSelectedAnswer(null);
+    setSubmitted(false);
+    setShowHint(false);
+  }, [problem.id]);
 
   const handleSubmit = () => {
     if (selectedAnswer !== null) {

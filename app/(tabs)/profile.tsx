@@ -35,6 +35,7 @@ import { activatePremium } from '@/lib/premium-system';
 import { WeeklyReportCard } from '@/components/weekly-report-card';
 import { usePremiumOnboarding } from '@/lib/premium-onboarding-context';
 import { PremiumOnboardingModal } from '@/components/premium-onboarding-modal';
+import { TreeGrowthDisplay } from '@/components/tree-growth-display';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
@@ -207,6 +208,11 @@ export default function ProfileScreen() {
 
         {selectedTab === 'profile' && (
           <View className="px-4 pb-8">
+            {/* 나무 성장 게이미피케이션 */}
+            <View className="mb-6">
+              <TreeGrowthDisplay />
+            </View>
+
             {/* 주간 금융 문해력 리포트 (프리미엄) */}
             {isPremium && (
               <View className="mb-6">

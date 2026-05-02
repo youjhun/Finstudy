@@ -23,6 +23,7 @@ import { isOnboardingCompleted, saveOnboardingData } from "@/lib/onboarding-stor
 import { PremiumProvider } from "@/lib/premium-context";
 import { PremiumOnboardingProvider } from "@/lib/premium-onboarding-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { initializeTreeGrowthSystem } from "@/lib/tree-growth-init";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -45,12 +46,15 @@ export default function RootLayout() {
     initManusRuntime();
   }, []);
 
-  // 온보딩 상태 확인
+  // 온보딩 상태 확인 및 나무 성장 시스템 초기화
   useEffect(() => {
     async function checkOnboarding() {
       try {
         const completed = await isOnboardingCompleted();
         setShowOnboarding(!completed);
+        
+        // 나무 성장 시스템 초기화 (더미 데이터 사용)
+        await initializeTreeGrowthSystem(true);
       } catch (err) {
         console.error('온보딩 상태 확인 오류:', err);
         setShowOnboarding(true);
