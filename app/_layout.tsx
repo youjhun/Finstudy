@@ -18,12 +18,6 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
-import { OnboardingQuiz, type OnboardingResult } from "@/components/onboarding-quiz";
-import { isOnboardingCompleted, saveOnboardingData } from "@/lib/onboarding-storage";
-import { PremiumProvider } from "@/lib/premium-context";
-import { PremiumOnboardingProvider } from "@/lib/premium-onboarding-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { initializeTreeGrowthSystem } from "@/lib/tree-growth-init";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -38,51 +32,11 @@ export default function RootLayout() {
 
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
-  const [showOnboarding, setShowOnboarding] = useState(true);
-  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
 
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
   }, []);
-
-  // 온보딩 상태 확인 및 나무 성장 시스템 초기화
-  useEffect(() => {
-    async function checkOnboarding() {
-      try {
-        const completed = await isOnboardingCompleted();
-        setShowOnboarding(!completed);
-        
-        // 나무 성장 시스템 초기화 (더미 데이터 사용)
-        await initializeTreeGrowthSystem(true);
-      } catch (err) {
-        console.error('온보딩 상태 확인 오류:', err);
-        setShowOnboarding(true);
-      } finally {
-        setIsCheckingOnboarding(false);
-      }
-    }
-    checkOnboarding();
-  }, []);
-
-  const handleOnboardingComplete = async (result: OnboardingResult) => {
-    try {
-      await saveOnboardingData({
-        level: result.level,
-        score: result.score,
-        interests: result.interests,
-      });
-      const existingProgress = await AsyncStorage.getItem('finstudy-progress-v1');
-      if (existingProgress) {
-        const progress = JSON.parse(existingProgress);
-        progress.xp = (progress.xp || 0) + 100;
-        await AsyncStorage.setItem('finstudy-progress-v1', JSON.stringify(progress));
-      }
-      setShowOnboarding(false);
-    } catch (err) {
-      console.error('온보딩 저장 오류:', err);
-    }
-  };
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
     setInsets(metrics.insets);
@@ -126,10 +80,8 @@ export default function RootLayout() {
 
   const content = (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <PremiumProvider>
-        <PremiumOnboardingProvider>
-          <trpc.Provider client={trpcClient} queryClient={queryClient}>
-            <QueryClientProvider client={queryClient}>
+      <trpc.Provider client={trpcClient} queryClient={queryClient}>
+        <QueryClientProvider client={queryClient}>
           {/* Default to hiding native headers so raw route segments don't appear (e.g. "(tabs)", "products/[id]"). */}
           {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
@@ -138,13 +90,8 @@ export default function RootLayout() {
             <Stack.Screen name="oauth/callback" />
           </Stack>
           <StatusBar style="auto" />
-          {!isCheckingOnboarding && (
-            <OnboardingQuiz visible={showOnboarding} onComplete={handleOnboardingComplete} />
-          )}
-            </QueryClientProvider>
-          </trpc.Provider>
-        </PremiumOnboardingProvider>
-      </PremiumProvider>
+        </QueryClientProvider>
+      </trpc.Provider>
     </GestureHandlerRootView>
   );
 
