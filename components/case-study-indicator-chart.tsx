@@ -19,9 +19,6 @@ export function CaseStudyIndicatorChart({
   emoji,
 }: CaseStudyIndicatorChartProps) {
   const colors = useColors();
-  const screenWidth = Dimensions.get('window').width;
-  const chartWidth = screenWidth - 32;
-  const chartHeight = 200;
 
   if (data.length < 2) {
     return null;
@@ -33,17 +30,10 @@ export function CaseStudyIndicatorChart({
   const maxValue = Math.max(...values);
   const valueRange = maxValue - minValue || 1;
 
-  // 차트 포인트 계산
-  const points = data.map((d, index) => {
-    const x = (index / (data.length - 1)) * chartWidth;
-    const y = chartHeight - ((d.value - minValue) / valueRange) * chartHeight;
-    return { x, y, value: d.value, date: d.date, change: d.change };
+  // 정규화된 높이 계산 (0-100)
+  const normalizedHeights = data.map((d) => {
+    return ((d.value - minValue) / valueRange) * 100;
   });
-
-  // SVG 경로 생성
-  const pathData = points
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
-    .join(' ');
 
   // 색상 결정 (상승/하락)
   const isPositive = data[data.length - 1].value >= data[0].value;
@@ -86,60 +76,73 @@ export function CaseStudyIndicatorChart({
         </View>
       </View>
 
-      {/* 차트 */}
-      <View style={{ height: chartHeight, backgroundColor: colors.background, borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
-        <svg
-          width={chartWidth}
-          height={chartHeight}
-          style={{ position: 'absolute' }}
-        >
-          {/* 그리드 라인 */}
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
-            <line
-              key={`grid-${ratio}`}
-              x1="0"
-              y1={chartHeight - chartHeight * ratio}
-              x2={chartWidth}
-              y2={chartHeight - chartHeight * ratio}
-              stroke={colors.border}
-              strokeWidth="0.5"
-              strokeDasharray="2,2"
+      {/* 바 차트 (텍스트 기반) */}
+      <View style={{ height: 150, backgroundColor: colors.background, borderRadius: 8, padding: 8, marginBottom: 12, justifyContent: 'flex-end' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: '100%', gap: 4 }}>
+          {normalizedHeights.map((height, index) => (
+            <View
+              key={index}
+              style={{
+                flex: 1,
+                height: `${Math.max(height, 5)}%`,
+                backgroundColor: lineColor,
+                borderRadius: 4,
+                opacity: index === normalizedHeights.length - 1 ? 1 : 0.6,
+              }}
             />
           ))}
+        </View>
+      </View>
 
-          {/* 라인 차트 */}
-          <path
-            d={pathData}
-            stroke={lineColor}
-            strokeWidth="2.5"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+      {/* 데이터 포인트 표 */}
+      <View style={{ marginBottom: 12 }}>
+        <View style={{ flexDirection: 'row', marginBottom: 8, paddingBottom: 8, borderBottomColor: colors.border, borderBottomWidth: 1 }}>
+          <Text style={{ flex: 1, fontSize: 11, fontWeight: '600', color: colors.muted }}>
+            날짜
+          </Text>
+          <Text style={{ flex: 1, fontSize: 11, fontWeight: '600', color: colors.muted, textAlign: 'right' }}>
+            값
+          </Text>
+          <Text style={{ flex: 1, fontSize: 11, fontWeight: '600', color: colors.muted, textAlign: 'right' }}>
+            변화
+          </Text>
+        </View>
 
-          {/* 포인트 */}
-          {points.map((point, index) => (
-            <circle
-              key={`point-${index}`}
-              cx={point.x}
-              cy={point.y}
-              r="3"
-              fill={lineColor}
-              opacity={index === points.length - 1 ? 1 : 0.5}
-            />
-          ))}
-
-          {/* 면적 채우기 */}
-          <path
-            d={`${pathData} L ${points[points.length - 1].x} ${chartHeight} L 0 ${chartHeight} Z`}
-            fill={lineColor}
-            opacity="0.1"
-          />
-        </svg>
+        {data.map((point, index) => (
+          <View
+            key={index}
+            style={{
+              flexDirection: 'row',
+              paddingVertical: 6,
+              paddingHorizontal: 0,
+              backgroundColor: index === data.length - 1 ? colors.background : 'transparent',
+              borderRadius: 4,
+              marginBottom: index < data.length - 1 ? 4 : 0,
+            }}
+          >
+            <Text style={{ flex: 1, fontSize: 11, color: colors.foreground }}>
+              {point.date}
+            </Text>
+            <Text style={{ flex: 1, fontSize: 11, color: colors.foreground, fontWeight: '600', textAlign: 'right' }}>
+              {point.value.toFixed(1)}
+            </Text>
+            <Text
+              style={{
+                flex: 1,
+                fontSize: 11,
+                fontWeight: '600',
+                textAlign: 'right',
+                color: point.change !== undefined ? (point.change >= 0 ? '#10B981' : '#EF4444') : colors.muted,
+              }}
+            >
+              {point.change !== undefined ? (point.change >= 0 ? '+' : '') + point.change.toFixed(1) + '%' : '-'}
+            </Text>
+          </View>
+        ))}
       </View>
 
       {/* 범례 */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTopColor: colors.border, borderTopWidth: 1 }}>
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 11, color: colors.muted, marginBottom: 4 }}>
             최소: {minValue.toFixed(1)} {unit}
