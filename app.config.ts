@@ -1,7 +1,23 @@
 import './scripts/load-env.js';
 import type { ExpoConfig } from 'expo/config';
 
-const bundleId = '{{bundle_id}}';
+const rawBundleId = '{{bundle_id}}';
+const bundleId = rawBundleId
+  .replace(/[-_]/g, '.')
+  .replace(/[^a-zA-Z0-9._]/g, '')
+  .replace(/\.+/g, '.')
+  .replace(/^\.|\.$/, '')
+  .toLowerCase()
+  .split('.')
+  .map((segment) => {
+    if (!segment) return 'x';
+    if (!/^[a-zA-Z]/.test(segment)) {
+      return 'x' + segment;
+    }
+    return segment;
+  })
+  .join('.') || 'space.manus.app';
+
 const timestamp = bundleId.split('.').pop()?.replace(/^t/, '') ?? '';
 const schemeFromBundleId = `manus${timestamp}`;
 

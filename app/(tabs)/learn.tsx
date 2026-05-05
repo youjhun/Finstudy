@@ -18,6 +18,7 @@ import { usePremiumOnboarding } from '@/lib/premium-onboarding-context';
 import { PremiumOnboardingModal } from '@/components/premium-onboarding-modal';
 
 import { subjects, curriculum, unit2Screens, unit2Problems, getSubjectProblems, type Unit, type Subject } from '@/lib/curriculum-data';
+import { CaseStudyTab } from './learn-case-study-tab';
 import {
   LearningSessionManager,
   type UserProgress,
@@ -43,7 +44,7 @@ import {
  * 6. 자격증 대비 화면 (프리미엄)
  */
 
-type ScreenState = 'subject-list' | 'unit-list' | 'unit-detail' | 'learning' | 'session-complete' | 'certification';
+type ScreenState = 'subject-list' | 'unit-list' | 'unit-detail' | 'learning' | 'session-complete' | 'certification' | 'case-study';
 
 interface LearningTabState {
   screen: ScreenState;
@@ -51,6 +52,7 @@ interface LearningTabState {
   selectedUnit?: Unit;
   session?: LearningSessionState;
   progress?: UserProgress;
+  tab?: 'curriculum' | 'case-study';
 }
 
 export default function LearnScreen() {
@@ -89,6 +91,38 @@ export default function LearnScreen() {
               6개 과목으로 금융을 완벽히 마스터하세요
             </Text>
           </View>
+
+          {/* 케이스 스터디 섹션 */}
+          <Pressable
+            onPress={() => {
+              if (Platform.OS !== 'web') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              setState({ screen: 'case-study' });
+            }}
+            style={({ pressed }) => [{
+              backgroundColor: '#EC4899',
+              borderRadius: 16,
+              padding: 18,
+              marginBottom: 20,
+              opacity: pressed ? 0.8 : 1,
+              shadowColor: '#EC4899',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 6,
+            }]}
+          >
+            <View className="flex-row items-center justify-between">
+              <View className="flex-1">
+                <Text className="text-lg font-bold text-white mb-1">📊 케이스 스터디</Text>
+                <Text className="text-xs text-white opacity-80">리먼브라더스 · IMF 외환 위기 · 실제 사례 분석</Text>
+              </View>
+              <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 }}>
+                <Text className="text-xs text-white font-bold">NEW</Text>
+              </View>
+            </View>
+          </Pressable>
 
           {/* NCS/자격증 대비 섹션 (프리미엄) */}
           {isPremium && (
@@ -685,6 +719,14 @@ export default function LearnScreen() {
       return renderLearning();
     case 'session-complete':
       return renderSessionComplete();
+    case 'case-study':
+      return (
+        <CaseStudyTab
+          onQuizStart={(caseStudyId) => {
+            console.log('Quiz started for case study:', caseStudyId);
+          }}
+        />
+      );
     case 'certification':
       return (
         <>
