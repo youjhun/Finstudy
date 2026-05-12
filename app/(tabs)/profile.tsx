@@ -38,6 +38,9 @@ import { PremiumOnboardingModal } from '@/components/premium-onboarding-modal';
 import { TreeGrowthDisplay } from '@/components/tree-growth-display';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
+import { StreakCalendar } from '@/components/streak-calendar';
+import { StreakStatsCard } from '@/components/streak-stats-card';
+import { getStreakData, initializeStreakData, type StreakData } from '@/lib/streak-system';
 
 type MainTab = 'profile' | 'league' | 'community';
 type CommunityTab = 'friends' | 'ranking' | 'activity';
@@ -48,6 +51,7 @@ export default function ProfileScreen() {
   const { onboardingState, shouldShowWeeklyReportTutorial } = usePremiumOnboarding();
   const [showWeeklyReportTutorial, setShowWeeklyReportTutorial] = useState(shouldShowWeeklyReportTutorial);
   const [currentUser, setCurrentUser] = useState<UserProfile>(createDefaultProfile());
+  const [streakData, setStreakData] = useState<StreakData | null>(null);
   const [leagueRanking, setLeagueRanking] = useState<UserProfile[]>([]);
   const [selectedTab, setSelectedTab] = useState<MainTab>('profile');
   const [showAdminLogin, setShowAdminLogin] = useState(false);
@@ -68,6 +72,18 @@ export default function ProfileScreen() {
     // 리그 순위 정렬
     const sorted = [...sampleLeagueUsers].sort((a, b) => a.league.leagueRank - b.league.leagueRank);
     setLeagueRanking(sorted);
+
+    // 스트릭 데이터 초기화
+    const initStreak = async () => {
+      const existing = await getStreakData();
+      if (existing.completedDates.length === 0) {
+        const dummy = await initializeStreakData();
+        setStreakData(dummy);
+      } else {
+        setStreakData(existing);
+      }
+    };
+    initStreak();
   }, []);
   
   // 커뮤니티 데이터 로드
@@ -208,6 +224,18 @@ export default function ProfileScreen() {
 
         {selectedTab === 'profile' && (
           <View className="px-4 pb-8">
+            {/* 연속학습 스트릭 */}
+            {streakData && (
+              <>
+                <View className="mb-6">
+                  <StreakStatsCard streakData={streakData} />
+                </View>
+                <View className="mb-6">
+                  <StreakCalendar completedDates={streakData.completedDates} />
+                </View>
+              </>
+            )}
+
             {/* 나무 성장 게이미피케이션 */}
             <View className="mb-6">
               <TreeGrowthDisplay />
